@@ -1,6 +1,12 @@
 "use client";
 
-import { createContext, useContext, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { salas } from "@/lib/mock-data";
 
 interface ReservationContextValue {
@@ -23,9 +29,15 @@ const ReservationContext = createContext<ReservationContextValue | null>(
 
 export function ReservationProvider({ children }: { children: ReactNode }) {
   const [salaId, setSalaId] = useState(salas[0].id);
-  const [data, setData] = useState<Date | undefined>(new Date());
+  // Começa vazio: new Date() no estado inicial quebra o prerender (Cache Components)
+  const [data, setData] = useState<Date | undefined>(undefined);
   const [range, setRange] = useState<[string, string] | null>(null);
   const [abrirCheckout, setAbrirCheckout] = useState(false);
+
+  // Define a data de hoje só no navegador, sem sobrescrever uma escolha do usuário
+  useEffect(() => {
+    setData((atual) => atual ?? new Date());
+  }, []);
 
   function reset() {
     setRange(null);
