@@ -40,8 +40,17 @@ export function TopNav() {
     let ativo = true;
     const supabase = createClient();
 
-    supabase.auth.getUser().then(async ({ data }) => {
-      if (!data.user || !ativo) return;
+    async function carregarUsuario() {
+      const { data } = await supabase.auth.getUser();
+      if (!ativo) return;
+
+      if (!data.user) {
+        setEmail(null);
+        setNome(null);
+        setTipo(null);
+        return;
+      }
+
       setEmail(data.user.email ?? null);
 
       const { data: perfil } = await supabase
@@ -53,10 +62,22 @@ export function TopNav() {
       if (!ativo) return;
       setNome(perfil?.nome ?? data.user.email ?? null);
       setTipo(perfil?.tipo ?? null);
+    }
+
+    carregarUsuario();
+
+    // Reage a qualquer troca de sessão (login, logout, token renovado) —
+    // sem isso, trocar de usuário sem dar reload deixava os dados antigos
+    // visíveis no menu.
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      carregarUsuario();
     });
 
     return () => {
       ativo = false;
+      subscription.unsubscribe();
     };
   }, []);
 
@@ -64,8 +85,14 @@ export function TopNav() {
     setSaindo(true);
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
+
+    // Mantém o modal com "Saindo..." por 2s antes de fechar e redirecionar,
+    // para dar um feedback visual claro de que a ação está acontecendo.
+    setTimeout(() => {
+      setPerfilOpen(false);
+      router.push("/login");
+      router.refresh();
+    }, 2000);
   }
 
   return (
