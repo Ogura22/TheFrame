@@ -14,6 +14,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import {
   Table,
   TableBody,
@@ -54,11 +56,16 @@ export default function AdminPage() {
 
         <TabsContent value="clinicas" className="mt-4">
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Clínicas cadastradas</CardTitle>
-              <CardDescription>
-                {clinicas.length} clínica(s) ativas na plataforma
-              </CardDescription>
+            <CardHeader className="flex-row items-center justify-between space-y-0">
+              <div>
+                <CardTitle className="text-base">Clínicas cadastradas</CardTitle>
+                <CardDescription>
+                  {clinicas.length} clínica(s) ativas na plataforma
+                </CardDescription>
+              </div>
+              <Button size="sm" render={<Link href="/admin/clinicas/nova" />}>
+                Nova clínica
+              </Button>
             </CardHeader>
             <CardContent>
               <Table>
