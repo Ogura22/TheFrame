@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CalendarClock, CreditCard, Package, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,20 +12,18 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import {
-  notificacoes as notificacoesIniciais,
-  type Notificacao,
-  type TipoNotificacao,
-} from "@/lib/mock-data";
+import type { NotificacaoDb, TipoNotificacaoDb } from "@/lib/db-types";
+import { useClinica } from "@/lib/clinica-context";
+import { createClient } from "@/lib/supabase/client";
 
-const iconePorTipo: Record<TipoNotificacao, typeof CalendarClock> = {
+const iconePorTipo: Record<TipoNotificacaoDb, typeof CalendarClock> = {
   reserva: CalendarClock,
   material: Package,
   pagamento: CreditCard,
   reagendamento: RefreshCw,
 };
 
-const labelPorTipo: Record<TipoNotificacao, string> = {
+const labelPorTipo: Record<TipoNotificacaoDb, string> = {
   reserva: "Reserva",
   material: "Material",
   pagamento: "Pagamento",
@@ -33,8 +31,7 @@ const labelPorTipo: Record<TipoNotificacao, string> = {
 };
 
 function formatarQuando(iso: string) {
-  const data = new Date(iso);
-  return data.toLocaleString("pt-BR", {
+  return new Date(iso).toLocaleString("pt-BR", {
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",
@@ -43,14 +40,31 @@ function formatarQuando(iso: string) {
 }
 
 export function NotificacoesTab() {
-  const [lista, setLista] = useState<Notificacao[]>(notificacoesIniciais);
+  const { clinicaId } = useClinica();
+  const [lista, setLista] = useState<NotificacaoDb[]>([]);
+  const [carregando, setCarregando] = useState(true);
   const [somenteNaoLidas, setSomenteNaoLidas] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("notificacoes")
+      .select("*")
+      .eq("clinica_id", clinicaId)
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        setLista(data ?? []);
+        setCarregando(false);
+      });
+  }, [clinicaId]);
 
   const visiveis = somenteNaoLidas ? lista.filter((n) => !n.lida) : lista;
   const naoLidas = lista.filter((n) => !n.lida).length;
 
-  function marcarComoLida(id: string) {
+  async function marcarComoLida(id: string) {
     setLista((l) => l.map((n) => (n.id === id ? { ...n, lida: true } : n)));
+    const supabase = createClient();
+    await supabase.from("notificacoes").update({ lida: true }).eq("id", id);
   }
 
   return (
@@ -74,7 +88,12 @@ export function NotificacoesTab() {
         </div>
       </CardHeader>
       <CardContent className="divide-y">
-        {visiveis.length === 0 && (
+        {carregando && (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            Carregando...
+          </p>
+        )}
+        {!carregando && visiveis.length === 0 && (
           <p className="py-6 text-center text-sm text-muted-foreground">
             Nenhuma notificação por aqui.
           </p>
@@ -109,7 +128,7 @@ export function NotificacoesTab() {
                   {n.descricao}
                 </p>
                 <p className="mt-1 text-[11px] font-normal text-muted-foreground">
-                  {formatarQuando(n.dataHoraISO)}
+                  {formatarQuando(n.created_at)}
                 </p>
               </div>
               {!n.lida && (

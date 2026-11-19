@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CalendarIcon, Clock } from "lucide-react";
 import {
   Tabs,
@@ -29,19 +29,15 @@ import { Calendar } from "@/components/ui/calendar";
 import { FieldBox } from "@/components/field-box";
 import { TimeRangeSelect } from "@/components/time-range-select";
 import { TermsGateDialog } from "@/components/terms-acceptance";
-import {
-  clienteLogado,
-  formatCurrency,
-  formatDuracao,
-  horariosBloqueados,
-  horariosDisponiveis,
-  reservas as reservasIniciais,
-  type Reserva,
-  type StatusReserva,
-} from "@/lib/mock-data";
+import { formatCurrency, formatDuracao, gerarSlots } from "@/lib/mock-data";
+import type { ReservaDb, StatusReservaDb } from "@/lib/db-types";
+import { createClient } from "@/lib/supabase/client";
 
 const COMISSAO_PCT = 0.08;
 const TAXA_GATEWAY_PCT = 0.0299;
+const HORARIOS = gerarSlots("07:00", "24:00", 30);
+
+type ReservaView = ReservaDb & { sala_nome: string };
 
 function toISODate(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -53,8 +49,8 @@ function horasEntre(a: string, b: string) {
   return (h2 * 60 + m2 - (h1 * 60 + m1)) / 60;
 }
 
-function StatusBadge({ status }: { status: StatusReserva }) {
-  const map: Record<StatusReserva, { label: string; variant: "default" | "secondary" | "destructive" }> = {
+function StatusBadge({ status }: { status: StatusReservaDb }) {
+  const map: Record<StatusReservaDb, { label: string; variant: "default" | "secondary" | "destructive" }> = {
     confirmada: { label: "Confirmada", variant: "default" },
     pendente: { label: "Aguardando aprovação", variant: "secondary" },
     cancelada: { label: "Cancelada", variant: "destructive" },
@@ -64,13 +60,64 @@ function StatusBadge({ status }: { status: StatusReserva }) {
 }
 
 export default function MinhasReservasPage() {
-  const [lista, setLista] = useState<Reserva[]>(
-    reservasIniciais.filter((r) => r.dr === clienteLogado)
-  );
-  const [reagendando, setReagendando] = useState<Reserva | null>(null);
+  const [lista, setLista] = useState<ReservaView[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [reagendando, setReagendando] = useState<ReservaView | null>(null);
   const [novaData, setNovaData] = useState<Date | undefined>(undefined);
   const [novoRange, setNovoRange] = useState<[string, string] | null>(null);
+  const [bloqueados, setBloqueados] = useState<string[]>([]);
   const [termosReagendamentoOpen, setTermosReagendamentoOpen] = useState(false);
+
+  useEffect(() => {
+    carregarReservas();
+  }, []);
+
+  async function carregarReservas() {
+    setCarregando(true);
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setCarregando(false);
+      return;
+    }
+
+    const { data } = await supabase
+      .from("reservas")
+      .select("*, salas(nome)")
+      .eq("cliente_id", user.id)
+      .order("dia", { ascending: false });
+
+    const linhas = (data ?? []) as unknown as (ReservaDb & {
+      salas: { nome: string } | null;
+    })[];
+    setLista(linhas.map((r) => ({ ...r, sala_nome: r.salas?.nome ?? "Sala" })));
+    setCarregando(false);
+  }
+
+  useEffect(() => {
+    if (!reagendando || !novaData) return;
+    const supabase = createClient();
+    supabase
+      .from("reservas")
+      .select("hora_inicio, hora_fim")
+      .eq("sala_id", reagendando.sala_id)
+      .eq("dia", toISODate(novaData))
+      .neq("status", "cancelada")
+      .neq("id", reagendando.id)
+      .then(({ data: ocupadas }) => {
+        const slots = new Set<string>();
+        for (const r of ocupadas ?? []) {
+          const inicioIdx = HORARIOS.indexOf(r.hora_inicio.slice(0, 5));
+          const fimIdx = HORARIOS.indexOf(r.hora_fim.slice(0, 5));
+          for (let i = inicioIdx; i < (fimIdx === -1 ? HORARIOS.length : fimIdx); i++) {
+            slots.add(HORARIOS[i]);
+          }
+        }
+        setBloqueados([...slots]);
+      });
+  }, [reagendando, novaData]);
 
   const hojeISO = toISODate(new Date());
 
@@ -81,57 +128,51 @@ export default function MinhasReservasPage() {
     .filter((r) => r.dia < hojeISO || r.status === "cancelada")
     .sort((a, b) => b.dia.localeCompare(a.dia));
 
-  const horasNovoRange = novoRange
-    ? horasEntre(novoRange[0], novoRange[1])
-    : 0;
+  const horasNovoRange = novoRange ? horasEntre(novoRange[0], novoRange[1]) : 0;
   const valorHoraReagendando = reagendando
-    ? reagendando.valor / horasEntre(reagendando.horaInicio, reagendando.horaFim)
+    ? reagendando.valor / horasEntre(reagendando.hora_inicio.slice(0, 5), reagendando.hora_fim.slice(0, 5))
     : 0;
   const novoValorBase = valorHoraReagendando * horasNovoRange;
   const novaComissao = novoValorBase * COMISSAO_PCT;
   const novaTaxaGateway = novoValorBase * TAXA_GATEWAY_PCT;
   const novoTotal = novoValorBase + novaComissao + novaTaxaGateway;
 
-  function abrirReagendamento(r: Reserva) {
+  function abrirReagendamento(r: ReservaView) {
     setReagendando(r);
     setNovaData(new Date(`${r.dia}T00:00:00`));
-    setNovoRange([r.horaInicio, r.horaFim]);
+    setNovoRange([r.hora_inicio.slice(0, 5), r.hora_fim.slice(0, 5)]);
   }
 
-  function confirmarReagendamento() {
+  async function confirmarReagendamento() {
     if (!reagendando || !novaData || !novoRange) return;
-    setLista((l) =>
-      l.map((r) =>
-        r.id === reagendando.id
-          ? {
-              ...r,
-              dia: toISODate(novaData),
-              horaInicio: novoRange[0],
-              horaFim: novoRange[1],
-              valor:
-                (r.valor / horasEntre(r.horaInicio, r.horaFim)) *
-                horasEntre(novoRange[0], novoRange[1]),
-              status: "pendente",
-              pago: false,
-            }
-          : r
-      )
-    );
+    const supabase = createClient();
+    await supabase
+      .from("reservas")
+      .update({
+        dia: toISODate(novaData),
+        hora_inicio: novoRange[0],
+        hora_fim: novoRange[1],
+        valor: novoValorBase,
+        status: "pendente",
+        pago: false,
+      })
+      .eq("id", reagendando.id);
     setReagendando(null);
+    await carregarReservas();
   }
 
-  function cancelar(id: string) {
-    setLista((l) =>
-      l.map((r) => (r.id === id ? { ...r, status: "cancelada" } : r))
-    );
+  async function cancelar(id: string) {
+    const supabase = createClient();
+    await supabase.from("reservas").update({ status: "cancelada" }).eq("id", id);
+    setLista((l) => l.map((r) => (r.id === id ? { ...r, status: "cancelada" } : r)));
   }
 
-  function ReservaCard({ r, podeAgir }: { r: Reserva; podeAgir: boolean }) {
+  function ReservaCard({ r, podeAgir }: { r: ReservaView; podeAgir: boolean }) {
     return (
       <Card>
         <CardContent className="flex items-start justify-between gap-3">
           <div className="space-y-1">
-            <p className="text-sm font-medium">{r.sala}</p>
+            <p className="text-sm font-medium">{r.sala_nome}</p>
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <CalendarIcon className="size-3.5" />
               {new Date(`${r.dia}T00:00:00`).toLocaleDateString("pt-BR", {
@@ -140,8 +181,8 @@ export default function MinhasReservasPage() {
                 year: "numeric",
               })}
               <Clock className="ml-2 size-3.5" />
-              {r.horaInicio}–{r.horaFim} (
-              {formatDuracao(horasEntre(r.horaInicio, r.horaFim))})
+              {r.hora_inicio.slice(0, 5)}–{r.hora_fim.slice(0, 5)} (
+              {formatDuracao(horasEntre(r.hora_inicio.slice(0, 5), r.hora_fim.slice(0, 5)))})
             </p>
             <p className="text-xs text-muted-foreground">
               {formatCurrency(r.valor)} · {r.pago ? "Pago" : "Pagamento pendente"}
@@ -150,11 +191,7 @@ export default function MinhasReservasPage() {
           </div>
           {podeAgir && r.status !== "cancelada" && (
             <div className="flex shrink-0 flex-col gap-1.5">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => abrirReagendamento(r)}
-              >
+              <Button size="sm" variant="outline" onClick={() => abrirReagendamento(r)}>
                 Reagendar
               </Button>
               <Button
@@ -172,11 +209,19 @@ export default function MinhasReservasPage() {
     );
   }
 
+  if (carregando) {
+    return (
+      <div className="mx-auto max-w-xl px-4 py-16 text-center text-sm text-muted-foreground">
+        Carregando...
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-xl px-4 pt-6 pb-16">
       <h1 className="text-2xl font-semibold tracking-tight">Minhas Reservas</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Consulte, reagende ou cancele suas reservas na The Frame Coworking.
+        Consulte, reagende ou cancele suas reservas.
       </p>
 
       <Tabs defaultValue="proximas" className="mt-6">
@@ -201,9 +246,7 @@ export default function MinhasReservasPage() {
               Nenhuma reserva no histórico ainda.
             </p>
           ) : (
-            historico.map((r) => (
-              <ReservaCard key={r.id} r={r} podeAgir={false} />
-            ))
+            historico.map((r) => <ReservaCard key={r.id} r={r} podeAgir={false} />)
           )}
         </TabsContent>
       </Tabs>
@@ -257,8 +300,8 @@ export default function MinhasReservasPage() {
             <div>
               <p className="mb-2 text-sm font-medium">Novo horário</p>
               <TimeRangeSelect
-                slots={horariosDisponiveis}
-                blocked={horariosBloqueados}
+                slots={HORARIOS}
+                blocked={bloqueados}
                 value={novoRange}
                 onChange={setNovoRange}
               />
@@ -292,7 +335,6 @@ export default function MinhasReservasPage() {
                 </div>
               </>
             )}
-
           </div>
 
           <DialogFooter>

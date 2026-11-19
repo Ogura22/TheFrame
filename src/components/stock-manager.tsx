@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Camera, Plus, Trash2, Upload } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,32 +21,50 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  categoriasItem,
-  itens as itensIniciais,
-  type CategoriaItem,
-  type Item,
-} from "@/lib/mock-data";
+import { categoriasItemDb, type CategoriaItemDb, type ItemDb } from "@/lib/db-types";
+import { useClinica } from "@/lib/clinica-context";
+import { createClient } from "@/lib/supabase/client";
 
-const PLACEHOLDER_IMG =
-  "https://picsum.photos/seed/novo-item/300/300";
+const PLACEHOLDER_IMG = "https://picsum.photos/seed/novo-item/300/300";
+
+async function enviarFoto(file: File, clinicaId: string, itemId: string) {
+  const supabase = createClient();
+  const caminho = `${clinicaId}/${itemId}-${Date.now()}.${file.name.split(".").pop()}`;
+  const { error } = await supabase.storage.from("itens").upload(caminho, file, {
+    upsert: true,
+  });
+  if (error) return null;
+  const { data } = supabase.storage.from("itens").getPublicUrl(caminho);
+  return data.publicUrl;
+}
 
 function ItemRow({
   item,
+  clinicaId,
   onChange,
   onRemove,
 }: {
-  item: Item;
-  onChange: (next: Item) => void;
+  item: ItemDb;
+  clinicaId: string;
+  onChange: (next: ItemDb) => void;
   onRemove: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const supabase = createClient();
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    onChange({ ...item, imagem: url });
+    const url = await enviarFoto(file, clinicaId, item.id);
+    if (!url) return;
+    await supabase.from("itens").update({ imagem_url: url }).eq("id", item.id);
+    onChange({ ...item, imagem_url: url });
+  }
+
+  async function salvar(campo: "preco" | "estoque", valor: number) {
+    const next = { ...item, [campo]: valor };
+    onChange(next);
+    await supabase.from("itens").update({ [campo]: valor }).eq("id", item.id);
   }
 
   return (
@@ -58,7 +76,7 @@ function ItemRow({
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={item.imagem}
+          src={item.imagem_url ?? PLACEHOLDER_IMG}
           alt={item.nome}
           className="size-full object-cover"
         />
@@ -77,7 +95,7 @@ function ItemRow({
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{item.nome}</p>
         <Badge variant="secondary" className="mt-0.5 text-[10px]">
-          {categoriasItem[item.categoria]}
+          {categoriasItemDb[item.categoria]}
         </Badge>
       </div>
 
@@ -88,9 +106,7 @@ function ItemRow({
             type="number"
             step="0.01"
             value={item.preco}
-            onChange={(e) =>
-              onChange({ ...item, preco: Number(e.target.value) || 0 })
-            }
+            onChange={(e) => salvar("preco", Number(e.target.value) || 0)}
             className="h-8 w-24"
           />
         </div>
@@ -99,9 +115,7 @@ function ItemRow({
           <Input
             type="number"
             value={item.estoque}
-            onChange={(e) =>
-              onChange({ ...item, estoque: Number(e.target.value) || 0 })
-            }
+            onChange={(e) => salvar("estoque", Number(e.target.value) || 0)}
             className="h-8 w-20"
           />
         </div>
@@ -125,13 +139,20 @@ function NovoItemDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCriar: (item: Item) => void;
+  onCriar: (dados: {
+    nome: string;
+    categoria: CategoriaItemDb;
+    preco: number;
+    estoque: number;
+    arquivoFoto: File | null;
+  }) => void;
 }) {
   const [nome, setNome] = useState("");
-  const [categoria, setCategoria] = useState<CategoriaItem>("material");
+  const [categoria, setCategoria] = useState<CategoriaItemDb>("material");
   const [preco, setPreco] = useState("");
   const [estoque, setEstoque] = useState("");
-  const [imagem, setImagem] = useState<string | null>(null);
+  const [arquivoFoto, setArquivoFoto] = useState<File | null>(null);
+  const [previa, setPrevia] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   function limpar() {
@@ -139,24 +160,25 @@ function NovoItemDialog({
     setCategoria("material");
     setPreco("");
     setEstoque("");
-    setImagem(null);
+    setArquivoFoto(null);
+    setPrevia(null);
   }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setImagem(URL.createObjectURL(file));
+    setArquivoFoto(file);
+    setPrevia(URL.createObjectURL(file));
   }
 
   function handleCriar() {
     if (!nome.trim()) return;
     onCriar({
-      id: `novo-${Date.now()}`,
       nome: nome.trim(),
       categoria,
       preco: Number(preco) || 0,
       estoque: Number(estoque) || 0,
-      imagem: imagem ?? PLACEHOLDER_IMG,
+      arquivoFoto,
     });
     limpar();
     onOpenChange(false);
@@ -184,13 +206,9 @@ function NovoItemDialog({
             onClick={() => fileRef.current?.click()}
             className="group relative mx-auto flex size-24 items-center justify-center overflow-hidden rounded-lg border bg-muted"
           >
-            {imagem ? (
+            {previa ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={imagem}
-                alt="Prévia do item"
-                className="size-full object-cover"
-              />
+              <img src={previa} alt="Prévia do item" className="size-full object-cover" />
             ) : (
               <span className="flex flex-col items-center gap-1 text-muted-foreground">
                 <Upload className="size-5" />
@@ -220,13 +238,13 @@ function NovoItemDialog({
             <Label>Categoria</Label>
             <Select
               value={categoria}
-              onValueChange={(v) => v && setCategoria(v as CategoriaItem)}
+              onValueChange={(v) => v && setCategoria(v as CategoriaItemDb)}
             >
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(categoriasItem).map(([value, label]) => (
+                {Object.entries(categoriasItemDb).map(([value, label]) => (
                   <SelectItem key={value} value={value}>
                     {label}
                   </SelectItem>
@@ -271,23 +289,72 @@ function NovoItemDialog({
 }
 
 export function StockManager() {
-  const [lista, setLista] = useState<Item[]>(itensIniciais);
+  const { clinicaId } = useClinica();
+  const [lista, setLista] = useState<ItemDb[]>([]);
+  const [carregando, setCarregando] = useState(true);
   const [novoItemOpen, setNovoItemOpen] = useState(false);
 
-  function updateItem(id: string, next: Item) {
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("itens")
+      .select("*")
+      .eq("clinica_id", clinicaId)
+      .order("created_at")
+      .then(({ data }) => {
+        setLista(data ?? []);
+        setCarregando(false);
+      });
+  }, [clinicaId]);
+
+  function updateItem(id: string, next: ItemDb) {
     setLista((l) => l.map((i) => (i.id === id ? next : i)));
   }
 
-  function removeItem(id: string) {
-    setLista((l) => l.filter((i) => i.id !== id));
+  async function removeItem(id: string) {
+    const supabase = createClient();
+    const { error } = await supabase.from("itens").delete().eq("id", id);
+    if (!error) setLista((l) => l.filter((i) => i.id !== id));
+  }
+
+  async function criar(dados: {
+    nome: string;
+    categoria: CategoriaItemDb;
+    preco: number;
+    estoque: number;
+    arquivoFoto: File | null;
+  }) {
+    const supabase = createClient();
+    const { data: item, error } = await supabase
+      .from("itens")
+      .insert({
+        clinica_id: clinicaId,
+        nome: dados.nome,
+        categoria: dados.categoria,
+        preco: dados.preco,
+        estoque: dados.estoque,
+      })
+      .select("*")
+      .single();
+
+    if (error || !item) return;
+
+    let imagemUrl: string | null = null;
+    if (dados.arquivoFoto) {
+      imagemUrl = await enviarFoto(dados.arquivoFoto, clinicaId, item.id);
+      if (imagemUrl) {
+        await supabase.from("itens").update({ imagem_url: imagemUrl }).eq("id", item.id);
+      }
+    }
+
+    setLista((l) => [...l, { ...item, imagem_url: imagemUrl }]);
   }
 
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
         <p className="text-xs text-muted-foreground">
-          Clique na foto para enviar uma nova imagem do item. Alterações aqui
-          são apenas locais neste protótipo.
+          Clique na foto para enviar uma nova imagem do item.
         </p>
         <Button size="sm" onClick={() => setNovoItemOpen(true)}>
           <Plus className="size-4" />
@@ -295,26 +362,29 @@ export function StockManager() {
         </Button>
       </div>
       <div>
-        {lista.map((item) => (
-          <ItemRow
-            key={item.id}
-            item={item}
-            onChange={(next) => updateItem(item.id, next)}
-            onRemove={() => removeItem(item.id)}
-          />
-        ))}
-        {lista.length === 0 && (
+        {carregando && (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            Carregando...
+          </p>
+        )}
+        {!carregando &&
+          lista.map((item) => (
+            <ItemRow
+              key={item.id}
+              item={item}
+              clinicaId={clinicaId}
+              onChange={(next) => updateItem(item.id, next)}
+              onRemove={() => removeItem(item.id)}
+            />
+          ))}
+        {!carregando && lista.length === 0 && (
           <p className="py-6 text-center text-sm text-muted-foreground">
             Nenhum item cadastrado.
           </p>
         )}
       </div>
 
-      <NovoItemDialog
-        open={novoItemOpen}
-        onOpenChange={setNovoItemOpen}
-        onCriar={(item) => setLista((l) => [...l, item])}
-      />
+      <NovoItemDialog open={novoItemOpen} onOpenChange={setNovoItemOpen} onCriar={criar} />
     </div>
   );
 }

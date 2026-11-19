@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   Tabs,
   TabsContent,
@@ -15,7 +17,6 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import Link from "next/link";
 import {
   Table,
   TableBody,
@@ -24,18 +25,52 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { clinicas, formatCurrency } from "@/lib/mock-data";
+import { formatCurrency } from "@/lib/mock-data";
+import type { ClinicaDb, ReservaDb, SalaDb } from "@/lib/db-types";
+import { createClient } from "@/lib/supabase/client";
+
+function horasEntre(a: string, b: string) {
+  const [h1, m1] = a.split(":").map(Number);
+  const [h2, m2] = b.split(":").map(Number);
+  return (h2 * 60 + m2 - (h1 * 60 + m1)) / 60;
+}
 
 export default function AdminPage() {
-  const faturamentoTotal = clinicas.reduce(
-    (acc, c) => acc + c.faturamentoBruto,
+  const [clinicas, setClinicas] = useState<ClinicaDb[]>([]);
+  const [salas, setSalas] = useState<SalaDb[]>([]);
+  const [reservas, setReservas] = useState<ReservaDb[]>([]);
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    const supabase = createClient();
+    Promise.all([
+      supabase.from("clinicas").select("*").order("created_at"),
+      supabase.from("salas").select("*"),
+      supabase.from("reservas").select("*").neq("status", "cancelada"),
+    ]).then(([clinicasRes, salasRes, reservasRes]) => {
+      setClinicas(clinicasRes.data ?? []);
+      setSalas(salasRes.data ?? []);
+      setReservas(reservasRes.data ?? []);
+      setCarregando(false);
+    });
+  }, []);
+
+  function resumoClinica(clinicaId: string) {
+    const doClinica = reservas.filter((r) => r.clinica_id === clinicaId);
+    const horas = doClinica.reduce(
+      (acc, r) => acc + horasEntre(r.hora_inicio.slice(0, 5), r.hora_fim.slice(0, 5)),
+      0
+    );
+    const faturamentoBruto = doClinica.reduce((acc, r) => acc + r.valor, 0);
+    return { horas, faturamentoBruto, comissao: faturamentoBruto * 0.08 };
+  }
+
+  const faturamentoTotal = reservas.reduce((acc, r) => acc + r.valor, 0);
+  const comissaoTotal = faturamentoTotal * 0.08;
+  const horasTotal = reservas.reduce(
+    (acc, r) => acc + horasEntre(r.hora_inicio.slice(0, 5), r.hora_fim.slice(0, 5)),
     0
   );
-  const comissaoTotal = clinicas.reduce(
-    (acc, c) => acc + c.comissaoPlataforma,
-    0
-  );
-  const horasTotal = clinicas.reduce((acc, c) => acc + c.horasLocadas, 0);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
@@ -68,40 +103,52 @@ export default function AdminPage() {
               </Button>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Clínica</TableHead>
-                    <TableHead>CNPJ</TableHead>
-                    <TableHead>Cidade</TableHead>
-                    <TableHead>Salas</TableHead>
-                    <TableHead>Checkout</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {clinicas.map((c) => (
-                    <TableRow key={c.id}>
-                      <TableCell className="font-medium">{c.nome}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {c.cnpj}
-                      </TableCell>
-                      <TableCell>{c.cidade}</TableCell>
-                      <TableCell>{c.salas}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            c.checkout === "automático"
-                              ? "default"
-                              : "secondary"
-                          }
-                        >
-                          {c.checkout}
-                        </Badge>
-                      </TableCell>
+              {carregando && (
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  Carregando...
+                </p>
+              )}
+              {!carregando && clinicas.length === 0 && (
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  Nenhuma clínica cadastrada ainda.
+                </p>
+              )}
+              {!carregando && clinicas.length > 0 && (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Clínica</TableHead>
+                      <TableHead>CNPJ</TableHead>
+                      <TableHead>Cidade</TableHead>
+                      <TableHead>Salas</TableHead>
+                      <TableHead>Checkout</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {clinicas.map((c) => (
+                      <TableRow key={c.id}>
+                        <TableCell className="font-medium">{c.nome}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {c.cnpj}
+                        </TableCell>
+                        <TableCell>{c.cidade}</TableCell>
+                        <TableCell>
+                          {salas.filter((s) => s.clinica_id === c.id).length}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              c.checkout === "automatico" ? "default" : "secondary"
+                            }
+                          >
+                            {c.checkout === "automatico" ? "automático" : "com confirmação"}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -136,8 +183,7 @@ export default function AdminPage() {
             <CardHeader>
               <CardTitle className="text-base">Retorno por clínica</CardTitle>
               <CardDescription>
-                Filtros de dia, semana, mês e período customizado entram no V2
-                com dados reais.
+                Filtros de dia, semana, mês e período customizado entram no V2.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -151,18 +197,17 @@ export default function AdminPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {clinicas.map((c) => (
-                    <TableRow key={c.id}>
-                      <TableCell className="font-medium">{c.nome}</TableCell>
-                      <TableCell>{c.horasLocadas}h</TableCell>
-                      <TableCell>
-                        {formatCurrency(c.faturamentoBruto)}
-                      </TableCell>
-                      <TableCell>
-                        {formatCurrency(c.comissaoPlataforma)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {clinicas.map((c) => {
+                    const r = resumoClinica(c.id);
+                    return (
+                      <TableRow key={c.id}>
+                        <TableCell className="font-medium">{c.nome}</TableCell>
+                        <TableCell>{r.horas}h</TableCell>
+                        <TableCell>{formatCurrency(r.faturamentoBruto)}</TableCell>
+                        <TableCell>{formatCurrency(r.comissao)}</TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>

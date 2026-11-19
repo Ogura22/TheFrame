@@ -34,21 +34,19 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { FieldBox } from "@/components/field-box";
 import { TimeRangeSlider } from "@/components/time-range-slider";
-import { ItemsCatalog } from "@/components/items-catalog";
+import { ItemsCatalog, type CatalogItem } from "@/components/items-catalog";
 import { TermsGateDialog } from "@/components/terms-acceptance";
 import { useCart } from "@/lib/cart-context";
 import { useReservation } from "@/lib/reservation-context";
-import {
-  formatCurrency,
-  formatDuracao,
-  horariosBloqueados,
-  horariosDisponiveis,
-  itens,
-  salas,
-} from "@/lib/mock-data";
+import { useClinica } from "@/lib/clinica-context";
+import { createClient } from "@/lib/supabase/client";
+import { formatCurrency, formatDuracao, gerarSlots } from "@/lib/mock-data";
+import type { ItemDb, SalaDb } from "@/lib/db-types";
 
 const COMISSAO_PCT = 0.08;
 const TAXA_GATEWAY_PCT = 0.0299;
+const HORARIOS = gerarSlots("07:00", "24:00", 30);
+const PLACEHOLDER_IMG = "https://picsum.photos/seed/item-sem-foto/300/300";
 
 function horasEntre(a: string, b: string) {
   const [h1, m1] = a.split(":").map(Number);
@@ -56,7 +54,23 @@ function horasEntre(a: string, b: string) {
   return (h2 * 60 + m2 - (h1 * 60 + m1)) / 60;
 }
 
+function toISODate(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
+
+function paraCatalogo(item: ItemDb): CatalogItem {
+  return {
+    id: item.id,
+    nome: item.nome,
+    categoria: item.categoria,
+    preco: item.preco,
+    estoque: item.estoque,
+    imagem: item.imagem_url ?? PLACEHOLDER_IMG,
+  };
+}
+
 export default function ClientePage() {
+  const { clinicaId, clinicaNome } = useClinica();
   const {
     data,
     setData,
@@ -71,7 +85,49 @@ export default function ClientePage() {
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [termosOpen, setTermosOpen] = useState(false);
   const [confirmado, setConfirmado] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
   const { cart: itemsCart, setQty: setItemQty, clear: clearCart } = useCart();
+
+  const [salas, setSalasState] = useState<SalaDb[]>([]);
+  const [itens, setItens] = useState<ItemDb[]>([]);
+  const [bloqueados, setBloqueados] = useState<string[]>([]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    Promise.all([
+      supabase.from("salas").select("*").eq("clinica_id", clinicaId).order("created_at"),
+      supabase.from("itens").select("*").eq("clinica_id", clinicaId).order("created_at"),
+    ]).then(([salasRes, itensRes]) => {
+      const listaSalas = salasRes.data ?? [];
+      setSalasState(listaSalas);
+      setItens(itensRes.data ?? []);
+      if (!salaId && listaSalas[0]) setSalaId(listaSalas[0].id);
+    });
+  }, [clinicaId, salaId, setSalaId]);
+
+  useEffect(() => {
+    if (!salaId || !data) return;
+    const supabase = createClient();
+    supabase
+      .from("reservas")
+      .select("hora_inicio, hora_fim")
+      .eq("sala_id", salaId)
+      .eq("dia", toISODate(data))
+      .neq("status", "cancelada")
+      .then(({ data: ocupadas }) => {
+        const slotsOcupados = new Set<string>();
+        for (const r of ocupadas ?? []) {
+          const inicioIdx = HORARIOS.indexOf(r.hora_inicio.slice(0, 5));
+          const fimIdx = HORARIOS.indexOf(r.hora_fim.slice(0, 5));
+          for (let i = inicioIdx; i < (fimIdx === -1 ? HORARIOS.length : fimIdx); i++) {
+            slotsOcupados.add(HORARIOS[i]);
+          }
+        }
+        setBloqueados([...slotsOcupados]);
+        setRange(null);
+      });
+  }, [salaId, data, setRange]);
 
   useEffect(() => {
     if (abrirCheckout) {
@@ -84,17 +140,10 @@ export default function ClientePage() {
     setConfirmModalOpen(true);
   }
 
-  function finalizarReserva() {
-    setConfirmModalOpen(false);
-    setConfirmado(true);
-    clearCart();
-    resetReserva();
-  }
-
-  const sala = useMemo(() => salas.find((s) => s.id === salaId)!, [salaId]);
+  const sala = useMemo(() => salas.find((s) => s.id === salaId), [salas, salaId]);
 
   const horas = range ? horasEntre(range[0], range[1]) : 0;
-  const valorBase = horas * sala.valorHora;
+  const valorBase = horas * (sala?.valor_hora ?? 0);
   const comissao = valorBase * COMISSAO_PCT;
   const taxaGateway = valorBase * TAXA_GATEWAY_PCT;
   const total = valorBase + comissao + taxaGateway;
@@ -105,13 +154,68 @@ export default function ClientePage() {
         .filter(([, qty]) => qty > 0)
         .map(([id, qty]) => ({ item: itens.find((i) => i.id === id)!, qty }))
         .filter((e) => e.item),
-    [itemsCart]
+    [itemsCart, itens]
   );
   const itensTotal = itensSelecionados.reduce(
     (acc, { item, qty }) => acc + item.preco * qty,
     0
   );
   const totalGeral = total + itensTotal;
+
+  async function finalizarReserva() {
+    if (!sala || !data || !range) return;
+    setEnviando(true);
+    setErro(null);
+
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setErro("Sessão expirada. Faça login de novo.");
+      setEnviando(false);
+      return;
+    }
+
+    const { data: reserva, error: erroReserva } = await supabase
+      .from("reservas")
+      .insert({
+        clinica_id: clinicaId,
+        cliente_id: user.id,
+        sala_id: sala.id,
+        dia: toISODate(data),
+        hora_inicio: range[0],
+        hora_fim: range[1],
+        valor: valorBase,
+        status: "confirmada",
+        pago: true,
+      })
+      .select("id")
+      .single();
+
+    if (erroReserva || !reserva) {
+      setErro("Não foi possível confirmar a reserva. Tente outro horário.");
+      setEnviando(false);
+      return;
+    }
+
+    if (itensSelecionados.length > 0) {
+      await supabase.from("reserva_itens").insert(
+        itensSelecionados.map(({ item, qty }) => ({
+          reserva_id: reserva.id,
+          item_id: item.id,
+          quantidade: qty,
+          preco_unitario: item.preco,
+        }))
+      );
+    }
+
+    setEnviando(false);
+    setConfirmModalOpen(false);
+    setConfirmado(true);
+    clearCart();
+    resetReserva();
+  }
 
   if (confirmado) {
     return (
@@ -131,14 +235,20 @@ export default function ClientePage() {
     );
   }
 
+  if (salas.length === 0) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-24 text-center text-sm text-muted-foreground">
+        Essa clínica ainda não cadastrou nenhuma sala disponível para reserva.
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-xl px-4 pt-8 pb-28">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Reservar</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            The Frame Coworking — Jardins, São Paulo
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{clinicaNome}</p>
         </div>
         <Badge variant="secondary" className="shrink-0">
           Checkout automático
@@ -154,7 +264,7 @@ export default function ClientePage() {
             <SelectContent>
               {salas.map((s) => (
                 <SelectItem key={s.id} value={s.id}>
-                  {s.nome} · {formatCurrency(s.valorHora)}/h
+                  {s.nome} · {formatCurrency(s.valor_hora)}/h
                 </SelectItem>
               ))}
             </SelectContent>
@@ -201,8 +311,8 @@ export default function ClientePage() {
       <div className="mt-6">
         <p className="mb-2 text-sm font-medium">Horários</p>
         <TimeRangeSlider
-          slots={horariosDisponiveis}
-          blocked={horariosBloqueados}
+          slots={HORARIOS}
+          blocked={bloqueados}
           value={range}
           onChange={setRange}
         />
@@ -222,7 +332,9 @@ export default function ClientePage() {
             <span>{horas > 0 ? formatDuracao(horas) : "—"}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Valor ({formatCurrency(sala.valorHora)}/h)</span>
+            <span className="text-muted-foreground">
+              Valor ({formatCurrency(sala?.valor_hora ?? 0)}/h)
+            </span>
             <span>{formatCurrency(valorBase)}</span>
           </div>
           <div className="flex justify-between text-muted-foreground">
@@ -274,7 +386,7 @@ export default function ClientePage() {
           <div className="space-y-3 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Sala</span>
-              <span>{sala.nome}</span>
+              <span>{sala?.nome}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Horário</span>
@@ -320,13 +432,14 @@ export default function ClientePage() {
                 Deseja adicionar algum item? (opcional)
               </p>
               <ItemsCatalog
-                itens={itens}
+                itens={itens.map(paraCatalogo)}
                 cart={itemsCart}
                 onQtyChange={setItemQty}
                 compact
               />
             </div>
 
+            {erro && <p className="text-sm text-destructive">{erro}</p>}
           </div>
 
           <DialogFooter>
@@ -341,6 +454,7 @@ export default function ClientePage() {
         open={termosOpen}
         onOpenChange={setTermosOpen}
         onConfirm={finalizarReserva}
+        confirmLabel={enviando ? "Confirmando..." : "Confirmar e pagar"}
       />
     </div>
   );

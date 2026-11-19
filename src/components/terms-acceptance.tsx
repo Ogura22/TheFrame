@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { clienteLogado, termosContratoExemplo } from "@/lib/mock-data";
+import { termosContratoExemplo } from "@/lib/mock-data";
 import { registrarAceite } from "@/lib/audit";
 
 export function TermsGateDialog({
@@ -21,7 +21,7 @@ export function TermsGateDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   confirmLabel?: string;
 }) {
   const [lido, setLido] = useState(false);
@@ -39,9 +39,9 @@ export function TermsGateDialog({
 
   async function confirmar() {
     setRegistrando(true);
-    await registrarAceite(termosContratoExemplo, clienteLogado);
+    await registrarAceite(termosContratoExemplo);
+    await onConfirm();
     setRegistrando(false);
-    onConfirm();
     onOpenChange(false);
   }
 

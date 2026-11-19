@@ -1,29 +1,59 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { ItemsCatalog } from "@/components/items-catalog";
+import { ItemsCatalog, type CatalogItem } from "@/components/items-catalog";
 import { useCart } from "@/lib/cart-context";
 import { useReservation } from "@/lib/reservation-context";
-import { formatCurrency, itens } from "@/lib/mock-data";
+import { useClinica } from "@/lib/clinica-context";
+import { createClient } from "@/lib/supabase/client";
+import { formatCurrency } from "@/lib/mock-data";
+import type { ItemDb } from "@/lib/db-types";
+
+const PLACEHOLDER_IMG = "https://picsum.photos/seed/item-sem-foto/300/300";
+
+function paraCatalogo(item: ItemDb): CatalogItem {
+  return {
+    id: item.id,
+    nome: item.nome,
+    categoria: item.categoria,
+    preco: item.preco,
+    estoque: item.estoque,
+    imagem: item.imagem_url ?? PLACEHOLDER_IMG,
+  };
+}
 
 export default function ItensPage() {
   const router = useRouter();
+  const { clinicaId } = useClinica();
   const { cart, setQty } = useCart();
   const { temReservaEmAndamento, solicitarCheckout } = useReservation();
+  const [itens, setItens] = useState<ItemDb[]>([]);
   const [finalizado, setFinalizado] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("itens")
+      .select("*")
+      .eq("clinica_id", clinicaId)
+      .order("created_at")
+      .then(({ data }) => setItens(data ?? []));
+  }, [clinicaId]);
 
   const linhasCarrinho = useMemo(
     () =>
       Object.entries(cart)
         .filter(([, qty]) => qty > 0)
         .map(([id, qty]) => {
-          const item = itens.find((i) => i.id === id)!;
-          return { item, qty };
-        }),
-    [cart]
+          const item = itens.find((i) => i.id === id);
+          return item ? { item, qty } : null;
+        })
+        .filter((e): e is { item: ItemDb; qty: number } => e !== null),
+    [cart, itens]
   );
 
   const total = linhasCarrinho.reduce(
@@ -31,12 +61,34 @@ export default function ItensPage() {
     0
   );
 
-  function handleSolicitar() {
+  async function handleSolicitar() {
     if (temReservaEmAndamento) {
       solicitarCheckout();
       router.push("/cliente");
       return;
     }
+
+    setEnviando(true);
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const { data: perfil } = user
+      ? await supabase.from("perfis").select("nome").eq("id", user.id).single()
+      : { data: null };
+
+    const resumo = linhasCarrinho
+      .map(({ item, qty }) => `${qty}x ${item.nome}`)
+      .join(", ");
+
+    await supabase.from("notificacoes").insert({
+      clinica_id: clinicaId,
+      tipo: "material",
+      titulo: "Solicitação de itens",
+      descricao: `${perfil?.nome ?? "Cliente"} solicitou: ${resumo} (${formatCurrency(total)}).`,
+    });
+
+    setEnviando(false);
     setFinalizado(true);
   }
 
@@ -95,7 +147,7 @@ export default function ItensPage() {
       )}
 
       <div className="mt-6">
-        <ItemsCatalog itens={itens} cart={cart} onQtyChange={setQty} />
+        <ItemsCatalog itens={itens.map(paraCatalogo)} cart={cart} onQtyChange={setQty} />
       </div>
 
       {linhasCarrinho.length > 0 && (
@@ -108,8 +160,12 @@ export default function ItensPage() {
               </p>
               <p className="text-lg font-semibold">{formatCurrency(total)}</p>
             </div>
-            <Button size="lg" onClick={handleSolicitar}>
-              {temReservaEmAndamento ? "Ir para o checkout" : "Solicitar itens"}
+            <Button size="lg" onClick={handleSolicitar} disabled={enviando}>
+              {temReservaEmAndamento
+                ? "Ir para o checkout"
+                : enviando
+                ? "Enviando..."
+                : "Solicitar itens"}
             </Button>
           </div>
         </div>

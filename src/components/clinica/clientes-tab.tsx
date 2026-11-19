@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -18,42 +18,87 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import {
-  clientesDetalhe,
-  formatCurrency,
-  reservas,
-  type ClienteDetalhe,
-} from "@/lib/mock-data";
+import { formatCurrency } from "@/lib/mock-data";
+import type { PerfilDb, ReservaDb } from "@/lib/db-types";
+import { useClinica } from "@/lib/clinica-context";
+import { createClient } from "@/lib/supabase/client";
+
+type ReservaComSala = ReservaDb & { salas: { nome: string } | null };
 
 export function ClientesTab() {
-  const [selecionado, setSelecionado] = useState<ClienteDetalhe | null>(null);
+  const { clinicaId } = useClinica();
+  const [clientes, setClientes] = useState<PerfilDb[]>([]);
+  const [reservasPorCliente, setReservasPorCliente] = useState<
+    Record<string, ReservaComSala[]>
+  >({});
+  const [carregando, setCarregando] = useState(true);
+  const [selecionado, setSelecionado] = useState<PerfilDb | null>(null);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("reservas")
+      .select("*, salas(nome), perfis:cliente_id(*)")
+      .eq("clinica_id", clinicaId)
+      .then(({ data }) => {
+        if (!data) {
+          setCarregando(false);
+          return;
+        }
+        const mapaClientes = new Map<string, PerfilDb>();
+        const mapaReservas: Record<string, ReservaComSala[]> = {};
+
+        for (const r of data as unknown as (ReservaComSala & { perfis: PerfilDb })[]) {
+          if (r.perfis) mapaClientes.set(r.perfis.id, r.perfis);
+          const lista = mapaReservas[r.cliente_id] ?? [];
+          lista.push(r);
+          mapaReservas[r.cliente_id] = lista;
+        }
+
+        setClientes([...mapaClientes.values()]);
+        setReservasPorCliente(mapaReservas);
+        setCarregando(false);
+      });
+  }, [clinicaId]);
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Clientes</CardTitle>
         <CardDescription>
-          Base de locatários da clínica. Clique em um cliente para ver
-          histórico de reservas e materiais.
+          Locatários que já reservaram salas nesta clínica. Clique para ver
+          histórico.
         </CardDescription>
       </CardHeader>
       <CardContent className="divide-y">
-        {clientesDetalhe.map((c) => (
+        {carregando && (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            Carregando...
+          </p>
+        )}
+        {!carregando && clientes.length === 0 && (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            Nenhum cliente ainda — aparece aqui assim que a primeira reserva
+            for feita.
+          </p>
+        )}
+        {clientes.map((c) => (
           <button
-            key={c.cpf}
+            key={c.id}
             onClick={() => setSelecionado(c)}
             className="flex w-full items-center gap-3 py-3 text-left first:pt-0 last:pb-0"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={c.foto}
+              src={c.foto_url ?? "https://picsum.photos/seed/sem-foto/200/200"}
               alt={c.nome}
               className="size-10 shrink-0 rounded-full object-cover"
             />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{c.nome}</p>
               <p className="text-xs text-muted-foreground">
-                {c.especialidade} · {c.registroProfissional} · {c.celular}
+                {c.especialidade ?? "—"} · {c.registro_profissional ?? "—"} ·{" "}
+                {c.celular ?? "—"}
               </p>
             </div>
           </button>
@@ -75,34 +120,28 @@ export function ClientesTab() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <p className="text-xs text-muted-foreground">CPF</p>
-                  <p>{selecionado.cpf}</p>
+                  <p>{selecionado.cpf ?? "—"}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">
                     Registro profissional
                   </p>
-                  <p>{selecionado.registroProfissional}</p>
+                  <p>{selecionado.registro_profissional ?? "—"}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Celular</p>
-                  <p>{selecionado.celular}</p>
+                  <p>{selecionado.celular ?? "—"}</p>
                 </div>
                 <div className="col-span-2">
                   <p className="text-xs text-muted-foreground">
                     Endereço de cobrança
                   </p>
-                  <p>{selecionado.enderecoCobranca}</p>
+                  <p>{selecionado.endereco_cobranca ?? "—"}</p>
                 </div>
                 <div className="col-span-2">
                   <p className="text-xs text-muted-foreground">E-mail</p>
-                  <p>{selecionado.email}</p>
+                  <p>{selecionado.email ?? "—"}</p>
                 </div>
-              </div>
-
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline">
-                  Redefinir senha do cliente
-                </Button>
               </div>
 
               <Separator />
@@ -110,37 +149,35 @@ export function ClientesTab() {
               <div>
                 <p className="mb-2 font-medium">Histórico de reservas</p>
                 <div className="space-y-2">
-                  {reservas
-                    .filter((r) => r.dr === selecionado.nome)
-                    .map((r) => (
-                      <div
-                        key={r.id}
-                        className="flex items-center justify-between rounded-md border px-3 py-2"
-                      >
-                        <div>
-                          <p>{r.sala}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(r.dia).toLocaleDateString("pt-BR")} ·{" "}
-                            {r.horaInicio}–{r.horaFim}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p>{formatCurrency(r.valor)}</p>
-                          <Badge
-                            variant={
-                              r.status === "confirmada"
-                                ? "default"
-                                : r.status === "pendente"
-                                ? "secondary"
-                                : "destructive"
-                            }
-                            className="mt-1 text-[10px]"
-                          >
-                            {r.status}
-                          </Badge>
-                        </div>
+                  {(reservasPorCliente[selecionado.id] ?? []).map((r) => (
+                    <div
+                      key={r.id}
+                      className="flex items-center justify-between rounded-md border px-3 py-2"
+                    >
+                      <div>
+                        <p>{r.salas?.nome ?? "Sala"}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(`${r.dia}T00:00:00`).toLocaleDateString("pt-BR")} ·{" "}
+                          {r.hora_inicio}–{r.hora_fim}
+                        </p>
                       </div>
-                    ))}
+                      <div className="text-right">
+                        <p>{formatCurrency(r.valor)}</p>
+                        <Badge
+                          variant={
+                            r.status === "confirmada"
+                              ? "default"
+                              : r.status === "pendente"
+                              ? "secondary"
+                              : "destructive"
+                          }
+                          className="mt-1 text-[10px]"
+                        >
+                          {r.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,17 +28,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { formatCurrency } from "@/lib/mock-data";
 import {
-  comissaoLabelPorTipo,
-  formatCurrency,
-  itens,
-  planos as planosIniciais,
-  salas,
-  tiposPlanoHabilitados,
-  tiposPlanoInfo,
-  type Plano,
-  type TipoPlano,
-} from "@/lib/mock-data";
+  comissaoLabelPorTipoDb,
+  tiposPlanoInfoDb,
+  type ItemDb,
+  type PlanoDb,
+  type SalaDb,
+  type TipoPlanoDb,
+} from "@/lib/db-types";
+import { useClinica } from "@/lib/clinica-context";
+import { createClient } from "@/lib/supabase/client";
 
 const diasSemana = [
   "Segunda-feira",
@@ -52,21 +52,27 @@ const diasSemana = [
 function NovoPlanoDialog({
   open,
   onOpenChange,
+  tiposHabilitados,
+  salas,
+  itens,
   onCriar,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCriar: (plano: Plano) => void;
+  tiposHabilitados: TipoPlanoDb[];
+  salas: SalaDb[];
+  itens: ItemDb[];
+  onCriar: (dados: Omit<PlanoDb, "id" | "clinica_id" | "created_at">) => void;
 }) {
-  const tiposCriaveis = tiposPlanoHabilitados.filter((t) => t !== "avulso");
-  const [tipo, setTipo] = useState<TipoPlano>(tiposCriaveis[0] ?? "flex");
+  const tiposCriaveis = tiposHabilitados.filter((t) => t !== "avulso");
+  const [tipo, setTipo] = useState<TipoPlanoDb>(tiposCriaveis[0] ?? "flex");
   const [nome, setNome] = useState("");
   const [valor, setValor] = useState("");
   const [horasIncluidas, setHorasIncluidas] = useState("");
   const [diaSemana, setDiaSemana] = useState(diasSemana[0]);
   const [horaInicio, setHoraInicio] = useState("09:00");
   const [horaFim, setHoraFim] = useState("12:00");
-  const [sala, setSala] = useState(salas[0].nome);
+  const [sala, setSala] = useState(salas[0]?.nome ?? "");
   const [itensInclusosIds, setItensInclusosIds] = useState<string[]>([]);
 
   function limpar() {
@@ -85,17 +91,12 @@ function NovoPlanoDialog({
   function handleCriar() {
     if (!nome.trim() || !valor) return;
     onCriar({
-      id: `plano-${Date.now()}`,
       tipo,
       nome: nome.trim(),
       valor: Number(valor) || 0,
-      horasIncluidas:
-        tipo === "flex" ? Number(horasIncluidas) || 0 : undefined,
-      recorrencia:
-        tipo === "fixo"
-          ? { diaSemana, horaInicio, horaFim, sala }
-          : undefined,
-      itensInclusosIds: itensInclusosIds.length ? itensInclusosIds : undefined,
+      horas_incluidas: tipo === "flex" ? Number(horasIncluidas) || 0 : null,
+      recorrencia: tipo === "fixo" ? { diaSemana, horaInicio, horaFim, sala } : null,
+      itens_inclusos_ids: itensInclusosIds.length ? itensInclusosIds : null,
       ativo: true,
     });
     limpar();
@@ -110,7 +111,7 @@ function NovoPlanoDialog({
         if (!o) limpar();
       }}
     >
-      <DialogContent>
+      <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Novo plano</DialogTitle>
           <DialogDescription>
@@ -121,14 +122,14 @@ function NovoPlanoDialog({
         <div className="space-y-3">
           <div className="space-y-1.5">
             <Label>Tipo de plano</Label>
-            <Select value={tipo} onValueChange={(v) => v && setTipo(v as TipoPlano)}>
+            <Select value={tipo} onValueChange={(v) => v && setTipo(v as TipoPlanoDb)}>
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {tiposCriaveis.map((t) => (
                   <SelectItem key={t} value={t}>
-                    {tiposPlanoInfo[t].label}
+                    {tiposPlanoInfoDb[t].label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -150,6 +151,7 @@ function NovoPlanoDialog({
             <Input
               id="plano-valor"
               type="number"
+              step="0.01"
               value={valor}
               onChange={(e) => setValor(e.target.value)}
               placeholder="0,00"
@@ -228,10 +230,7 @@ function NovoPlanoDialog({
             <Label>Itens inclusos neste plano (opcional)</Label>
             <div className="max-h-40 space-y-1.5 overflow-y-auto rounded-md border p-2">
               {itens.map((i) => (
-                <label
-                  key={i.id}
-                  className="flex items-center gap-2 text-sm"
-                >
+                <label key={i.id} className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
                     checked={itensInclusosIds.includes(i.id)}
@@ -240,11 +239,16 @@ function NovoPlanoDialog({
                   {i.nome}
                 </label>
               ))}
+              {itens.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Cadastre itens na aba Estoque para oferecê-los aqui.
+                </p>
+              )}
             </div>
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Comissão da plataforma: {comissaoLabelPorTipo(tipo)}
+            Comissão da plataforma: {comissaoLabelPorTipoDb(tipo)}
           </p>
         </div>
 
@@ -259,14 +263,47 @@ function NovoPlanoDialog({
 }
 
 export function PlanosTab() {
-  const [lista, setLista] = useState<Plano[]>(planosIniciais);
+  const { clinicaId } = useClinica();
+  const [lista, setLista] = useState<PlanoDb[]>([]);
+  const [salas, setSalas] = useState<SalaDb[]>([]);
+  const [itens, setItens] = useState<ItemDb[]>([]);
+  const [tiposHabilitados, setTiposHabilitados] = useState<TipoPlanoDb[]>(["avulso"]);
+  const [carregando, setCarregando] = useState(true);
   const [novoOpen, setNovoOpen] = useState(false);
 
-  function remover(id: string) {
-    setLista((l) => l.filter((p) => p.id !== id));
+  useEffect(() => {
+    const supabase = createClient();
+    Promise.all([
+      supabase.from("planos").select("*").eq("clinica_id", clinicaId).order("created_at"),
+      supabase.from("salas").select("*").eq("clinica_id", clinicaId),
+      supabase.from("itens").select("*").eq("clinica_id", clinicaId),
+      supabase.from("clinicas").select("tipos_plano_habilitados").eq("id", clinicaId).single(),
+    ]).then(([planosRes, salasRes, itensRes, clinicaRes]) => {
+      setLista(planosRes.data ?? []);
+      setSalas(salasRes.data ?? []);
+      setItens(itensRes.data ?? []);
+      setTiposHabilitados(clinicaRes.data?.tipos_plano_habilitados ?? ["avulso"]);
+      setCarregando(false);
+    });
+  }, [clinicaId]);
+
+  async function criar(dados: Omit<PlanoDb, "id" | "clinica_id" | "created_at">) {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("planos")
+      .insert({ ...dados, clinica_id: clinicaId })
+      .select("*")
+      .single();
+    if (!error && data) setLista((l) => [...l, data]);
   }
 
-  const podeCriar = tiposPlanoHabilitados.some((t) => t !== "avulso");
+  async function remover(id: string) {
+    const supabase = createClient();
+    const { error } = await supabase.from("planos").delete().eq("id", id);
+    if (!error) setLista((l) => l.filter((p) => p.id !== id));
+  }
+
+  const podeCriar = tiposHabilitados.some((t) => t !== "avulso");
 
   return (
     <Card>
@@ -275,8 +312,7 @@ export function PlanosTab() {
           <CardTitle className="text-base">Planos</CardTitle>
           <CardDescription>
             Tipos liberados pela plataforma para esta clínica:{" "}
-            {tiposPlanoHabilitados.map((t) => tiposPlanoInfo[t].label).join(", ")}
-            .
+            {tiposHabilitados.map((t) => tiposPlanoInfoDb[t].label).join(", ")}.
           </CardDescription>
         </div>
         {podeCriar && (
@@ -287,55 +323,69 @@ export function PlanosTab() {
         )}
       </CardHeader>
       <CardContent className="divide-y">
-        {lista.map((p) => (
-          <div
-            key={p.id}
-            className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
-          >
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium">{p.nome}</p>
-                <Badge variant="secondary" className="text-[10px]">
-                  {tiposPlanoInfo[p.tipo].label}
-                </Badge>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {p.valor === 0 ? "Sem mensalidade" : `${formatCurrency(p.valor)}/mês`}
-                {p.horasIncluidas && ` · ${p.horasIncluidas}h incluídas`}
-                {p.recorrencia &&
-                  ` · ${p.recorrencia.diaSemana} ${p.recorrencia.horaInicio}–${p.recorrencia.horaFim}`}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Comissão: {comissaoLabelPorTipo(p.tipo)}
-              </p>
-              {p.itensInclusosIds && p.itensInclusosIds.length > 0 && (
+        {carregando && (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            Carregando...
+          </p>
+        )}
+        {!carregando &&
+          lista.map((p) => (
+            <div
+              key={p.id}
+              className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+            >
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium">{p.nome}</p>
+                  <Badge variant="secondary" className="text-[10px]">
+                    {tiposPlanoInfoDb[p.tipo].label}
+                  </Badge>
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  Itens inclusos:{" "}
-                  {p.itensInclusosIds
-                    .map((id) => itens.find((i) => i.id === id)?.nome)
-                    .filter(Boolean)
-                    .join(", ")}
+                  {p.valor === 0 ? "Sem mensalidade" : `${formatCurrency(p.valor)}/mês`}
+                  {p.horas_incluidas && ` · ${p.horas_incluidas}h incluídas`}
+                  {p.recorrencia &&
+                    ` · ${p.recorrencia.diaSemana} ${p.recorrencia.horaInicio}–${p.recorrencia.horaFim}`}
                 </p>
+                <p className="text-xs text-muted-foreground">
+                  Comissão: {comissaoLabelPorTipoDb(p.tipo)}
+                </p>
+                {p.itens_inclusos_ids && p.itens_inclusos_ids.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Itens inclusos:{" "}
+                    {p.itens_inclusos_ids
+                      .map((id) => itens.find((i) => i.id === id)?.nome)
+                      .filter(Boolean)
+                      .join(", ")}
+                  </p>
+                )}
+              </div>
+              {p.tipo !== "avulso" && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-muted-foreground hover:text-destructive"
+                  onClick={() => remover(p.id)}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
               )}
             </div>
-            {p.tipo !== "avulso" && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="text-muted-foreground hover:text-destructive"
-                onClick={() => remover(p.id)}
-              >
-                <Trash2 className="size-4" />
-              </Button>
-            )}
-          </div>
-        ))}
+          ))}
+        {!carregando && lista.length === 0 && (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            Nenhum plano cadastrado ainda.
+          </p>
+        )}
       </CardContent>
 
       <NovoPlanoDialog
         open={novoOpen}
         onOpenChange={setNovoOpen}
-        onCriar={(plano) => setLista((l) => [...l, plano])}
+        tiposHabilitados={tiposHabilitados}
+        salas={salas}
+        itens={itens}
+        onCriar={criar}
       />
     </Card>
   );

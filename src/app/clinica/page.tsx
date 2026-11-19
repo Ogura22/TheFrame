@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { List, CalendarDays, Upload, FileText } from "lucide-react";
 import {
   Tabs,
@@ -11,6 +11,7 @@ import {
 import { AgendaCalendar } from "@/components/agenda-calendar";
 import { StockManager } from "@/components/stock-manager";
 import { ClientesTab } from "@/components/clinica/clientes-tab";
+import { SalasTab } from "@/components/clinica/salas-tab";
 import { PoliticaTab } from "@/components/clinica/politica-tab";
 import { NotificacoesTab } from "@/components/clinica/notificacoes-tab";
 import { PlanosTab } from "@/components/clinica/planos-tab";
@@ -39,14 +40,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  formatCurrency,
-  reservas,
-  termosContratoExemplo,
-  type Reserva,
-} from "@/lib/mock-data";
+import { formatCurrency, termosContratoExemplo } from "@/lib/mock-data";
+import type { ItemDb, ReservaDb, ReservaItemDb, SalaDb } from "@/lib/db-types";
+import { useClinica } from "@/lib/clinica-context";
+import { createClient } from "@/lib/supabase/client";
 
-function StatusBadge({ status }: { status: Reserva["status"] }) {
+type ReservaView = ReservaDb & {
+  sala: string;
+  dr: string;
+  materiais: string[];
+};
+
+function StatusBadge({ status }: { status: ReservaDb["status"] }) {
   const map = {
     confirmada: { label: "Confirmada", variant: "default" as const },
     pendente: { label: "Pendente", variant: "secondary" as const },
@@ -57,11 +62,58 @@ function StatusBadge({ status }: { status: Reserva["status"] }) {
 }
 
 export default function ClinicaPage() {
-  const [selecionada, setSelecionada] = useState<Reserva | null>(null);
+  const { clinicaId, clinicaNome } = useClinica();
+  const [reservas, setReservas] = useState<ReservaView[]>([]);
+  const [salas, setSalas] = useState<SalaDb[]>([]);
+  const [carregandoReservas, setCarregandoReservas] = useState(true);
+  const [selecionada, setSelecionada] = useState<ReservaView | null>(null);
   const [visao, setVisao] = useState<"lista" | "calendario">("calendario");
-  const [diaCalendario, setDiaCalendario] = useState(new Date("2026-11-10"));
+  const [diaCalendario, setDiaCalendario] = useState(new Date());
   const [termosModeloOpen, setTermosModeloOpen] = useState(false);
   const [arquivoTermos, setArquivoTermos] = useState<string | null>(null);
+
+  useEffect(() => {
+    const supabase = createClient();
+
+    async function carregar() {
+      supabase
+        .from("salas")
+        .select("*")
+        .eq("clinica_id", clinicaId)
+        .then(({ data }) => setSalas(data ?? []));
+
+      const { data } = await supabase
+        .from("reservas")
+        .select(
+          "*, salas(nome), perfis:cliente_id(nome), reserva_itens(quantidade, itens(nome))"
+        )
+        .eq("clinica_id", clinicaId)
+        .order("dia", { ascending: false });
+
+      type Linha = ReservaDb & {
+        salas: { nome: string } | null;
+        perfis: { nome: string } | null;
+        reserva_itens: (Pick<ReservaItemDb, "quantidade"> & {
+          itens: Pick<ItemDb, "nome"> | null;
+        })[];
+      };
+
+      const linhas = (data ?? []) as unknown as Linha[];
+      setReservas(
+        linhas.map((r) => ({
+          ...r,
+          sala: r.salas?.nome ?? "Sala",
+          dr: r.perfis?.nome ?? "Cliente",
+          materiais: r.reserva_itens.map(
+            (ri) => `${ri.itens?.nome ?? "Item"} (x${ri.quantidade})`
+          ),
+        }))
+      );
+      setCarregandoReservas(false);
+    }
+
+    carregar();
+  }, [clinicaId]);
 
   const faturamentoBruto = reservas.reduce((acc, r) => acc + r.valor, 0);
   const comissao = faturamentoBruto * 0.08;
@@ -71,9 +123,7 @@ export default function ClinicaPage() {
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          The Frame Coworking — Jardins
-        </h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{clinicaNome}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Painel da administração da clínica
         </p>
@@ -82,6 +132,7 @@ export default function ClinicaPage() {
       <Tabs defaultValue="agenda" className="mt-8">
         <TabsList className="flex w-full justify-start overflow-x-auto">
           <TabsTrigger value="agenda">Agenda</TabsTrigger>
+          <TabsTrigger value="salas">Salas</TabsTrigger>
           <TabsTrigger value="clientes">Clientes</TabsTrigger>
           <TabsTrigger value="estoque">Estoque</TabsTrigger>
           <TabsTrigger value="planos">Planos</TabsTrigger>
@@ -130,14 +181,35 @@ export default function ClinicaPage() {
               </div>
             </CardHeader>
             <CardContent>
-              {visao === "calendario" ? (
+              {carregandoReservas && (
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  Carregando...
+                </p>
+              )}
+              {!carregandoReservas && visao === "calendario" && (
                 <AgendaCalendar
                   date={diaCalendario}
                   onDateChange={setDiaCalendario}
-                  reservas={reservas}
-                  onSelect={setSelecionada}
+                  salas={salas}
+                  reservas={reservas.map((r) => ({
+                    id: r.id,
+                    dr: r.dr,
+                    especialidade: "",
+                    sala: r.sala,
+                    dia: r.dia,
+                    horaInicio: r.hora_inicio.slice(0, 5),
+                    horaFim: r.hora_fim.slice(0, 5),
+                    valor: r.valor,
+                    status: r.status,
+                    pago: r.pago,
+                    materiais: r.materiais,
+                  }))}
+                  onSelect={(r) =>
+                    setSelecionada(reservas.find((x) => x.id === r.id) ?? null)
+                  }
                 />
-              ) : (
+              )}
+              {!carregandoReservas && visao === "lista" && (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -162,10 +234,10 @@ export default function ClinicaPage() {
                           {r.sala}
                         </TableCell>
                         <TableCell>
-                          {new Date(r.dia).toLocaleDateString("pt-BR")}
+                          {new Date(`${r.dia}T00:00:00`).toLocaleDateString("pt-BR")}
                         </TableCell>
                         <TableCell>
-                          {r.horaInicio}–{r.horaFim}
+                          {r.hora_inicio.slice(0, 5)}–{r.hora_fim.slice(0, 5)}
                         </TableCell>
                         <TableCell>{formatCurrency(r.valor)}</TableCell>
                         <TableCell>{r.pago ? "Sim" : "Não"}</TableCell>
@@ -177,8 +249,17 @@ export default function ClinicaPage() {
                   </TableBody>
                 </Table>
               )}
+              {!carregandoReservas && reservas.length === 0 && (
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  Nenhuma reserva ainda.
+                </p>
+              )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="salas" className="mt-4">
+          <SalasTab />
         </TabsContent>
 
         <TabsContent value="estoque" className="mt-4">
@@ -308,7 +389,7 @@ export default function ClinicaPage() {
                     <TableRow key={r.id}>
                       <TableCell className="font-medium">{r.dr}</TableCell>
                       <TableCell>
-                        {new Date(r.dia).toLocaleDateString("pt-BR")}
+                        {new Date(`${r.dia}T00:00:00`).toLocaleDateString("pt-BR")}
                       </TableCell>
                       <TableCell>{formatCurrency(r.valor)}</TableCell>
                       <TableCell>
@@ -331,13 +412,13 @@ export default function ClinicaPage() {
           <DialogHeader>
             <DialogTitle>{selecionada?.dr}</DialogTitle>
             <DialogDescription>
-              {selecionada?.sala} · {selecionada?.horaInicio}–
-              {selecionada?.horaFim}
+              {selecionada?.sala} · {selecionada?.hora_inicio.slice(0, 5)}–
+              {selecionada?.hora_fim.slice(0, 5)}
             </DialogDescription>
           </DialogHeader>
           <div className="text-sm">
             <p className="font-medium">Materiais solicitados</p>
-            {selecionada?.materiais?.length ? (
+            {selecionada?.materiais.length ? (
               <ul className="mt-2 list-inside list-disc text-muted-foreground">
                 {selecionada.materiais.map((m) => (
                   <li key={m}>{m}</li>

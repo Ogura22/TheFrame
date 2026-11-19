@@ -1,9 +1,10 @@
+import { createClient } from "@/lib/supabase/client";
+
 export interface RegistroAceite {
   hashContrato: string;
   dataHoraISO: string;
   userAgent: string;
   ip: string;
-  usuario: string;
 }
 
 async function sha256(texto: string) {
@@ -14,8 +15,8 @@ async function sha256(texto: string) {
     .join("");
 }
 
-// IP real só é visível no servidor — no protótipo (client-side) usamos um
-// serviço público só para fins de demonstração da trilha de auditoria.
+// IP real só é visível no servidor — client-side usamos um serviço público
+// só para fins de demonstração da trilha de auditoria.
 async function obterIp(): Promise<string> {
   try {
     const res = await fetch("https://api.ipify.org?format=json");
@@ -27,34 +28,29 @@ async function obterIp(): Promise<string> {
 }
 
 export async function registrarAceite(
-  textoContrato: string,
-  usuario: string
+  textoContrato: string
 ): Promise<RegistroAceite> {
-  const [hashContrato, ip] = await Promise.all([
-    sha256(textoContrato),
-    obterIp(),
-  ]);
+  const [hashContrato, ip] = await Promise.all([sha256(textoContrato), obterIp()]);
 
   const registro: RegistroAceite = {
     hashContrato,
     dataHoraISO: new Date().toISOString(),
     userAgent: navigator.userAgent,
     ip,
-    usuario,
   };
 
-  // Sem backend ainda: guarda localmente. Quando o Supabase estiver
-  // conectado, isso vira um insert na tabela "aceites_contrato".
-  try {
-    const anteriores = JSON.parse(
-      localStorage.getItem("aceites_contrato") ?? "[]"
-    );
-    localStorage.setItem(
-      "aceites_contrato",
-      JSON.stringify([...anteriores, registro])
-    );
-  } catch {
-    // localStorage indisponível (ex: modo privado) — segue sem persistir.
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    await supabase.from("aceites_contrato").insert({
+      usuario_id: user.id,
+      hash_contrato: registro.hashContrato,
+      ip: registro.ip,
+      user_agent: registro.userAgent,
+    });
   }
 
   return registro;

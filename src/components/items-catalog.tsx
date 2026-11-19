@@ -5,21 +5,26 @@ import { Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import {
-  categoriasItem,
-  formatCurrency,
-  type CategoriaItem,
-  type Item,
-} from "@/lib/mock-data";
+import { categoriasItemDb, type CategoriaItemDb } from "@/lib/db-types";
+import { formatCurrency } from "@/lib/mock-data";
+
+export interface CatalogItem {
+  id: string;
+  nome: string;
+  categoria: CategoriaItemDb;
+  preco: number;
+  estoque: number;
+  imagem: string;
+}
 
 interface ItemsCatalogProps {
-  itens: Item[];
+  itens: CatalogItem[];
   cart: Record<string, number>;
   onQtyChange: (itemId: string, qty: number) => void;
   compact?: boolean;
 }
 
-const categorias: Array<CategoriaItem | "todos"> = [
+const categorias: Array<CategoriaItemDb | "todos"> = [
   "todos",
   "material",
   "produto",
@@ -32,7 +37,7 @@ export function ItemsCatalog({
   onQtyChange,
   compact = false,
 }: ItemsCatalogProps) {
-  const [filtro, setFiltro] = useState<CategoriaItem | "todos">("todos");
+  const [filtro, setFiltro] = useState<CategoriaItemDb | "todos">("todos");
 
   const filtrados =
     filtro === "todos" ? itens : itens.filter((i) => i.categoria === filtro);
@@ -51,7 +56,7 @@ export function ItemsCatalog({
                 : "text-muted-foreground hover:bg-muted"
             )}
           >
-            {c === "todos" ? "Todos" : categoriasItem[c]}
+            {c === "todos" ? "Todos" : categoriasItemDb[c]}
           </button>
         ))}
       </div>

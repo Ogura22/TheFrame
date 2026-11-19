@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,11 +11,52 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { politicaCancelamentoPadrao } from "@/lib/mock-data";
+import type { PoliticaCancelamentoDb } from "@/lib/db-types";
+import { useClinica } from "@/lib/clinica-context";
+import { createClient } from "@/lib/supabase/client";
+
+const PADRAO: Omit<PoliticaCancelamentoDb, "clinica_id"> = {
+  horas_antecedencia_gratuita: 48,
+  percentual_cobrado_fora_prazo: 100,
+  reagendamento_requer_aprovacao: true,
+};
 
 export function PoliticaTab() {
-  const [politica, setPolitica] = useState(politicaCancelamentoPadrao);
+  const { clinicaId } = useClinica();
+  const [politica, setPolitica] = useState(PADRAO);
+  const [carregando, setCarregando] = useState(true);
   const [salvo, setSalvo] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("politicas_cancelamento")
+      .select("*")
+      .eq("clinica_id", clinicaId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setPolitica(data);
+        setCarregando(false);
+      });
+  }, [clinicaId]);
+
+  async function salvar() {
+    const supabase = createClient();
+    await supabase
+      .from("politicas_cancelamento")
+      .upsert({ ...politica, clinica_id: clinicaId });
+    setSalvo(true);
+  }
+
+  if (carregando) {
+    return (
+      <Card>
+        <CardContent className="py-6 text-center text-sm text-muted-foreground">
+          Carregando...
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -36,12 +77,12 @@ export function PoliticaTab() {
           <Input
             id="antecedencia"
             type="number"
-            value={politica.horasAntecedenciaGratuita}
+            value={politica.horas_antecedencia_gratuita}
             onChange={(e) => {
               setSalvo(false);
               setPolitica({
                 ...politica,
-                horasAntecedenciaGratuita: Number(e.target.value) || 0,
+                horas_antecedencia_gratuita: Number(e.target.value) || 0,
               });
             }}
             className="w-32"
@@ -59,12 +100,12 @@ export function PoliticaTab() {
           <Input
             id="percentual"
             type="number"
-            value={politica.percentualCobradoForaPrazo}
+            value={politica.percentual_cobrado_fora_prazo}
             onChange={(e) => {
               setSalvo(false);
               setPolitica({
                 ...politica,
-                percentualCobradoForaPrazo: Number(e.target.value) || 0,
+                percentual_cobrado_fora_prazo: Number(e.target.value) || 0,
               });
             }}
             className="w-32"
@@ -74,12 +115,12 @@ export function PoliticaTab() {
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
-            checked={politica.reagendamentoRequerAprovacao}
+            checked={politica.reagendamento_requer_aprovacao}
             onChange={(e) => {
               setSalvo(false);
               setPolitica({
                 ...politica,
-                reagendamentoRequerAprovacao: e.target.checked,
+                reagendamento_requer_aprovacao: e.target.checked,
               });
             }}
           />
@@ -87,7 +128,7 @@ export function PoliticaTab() {
         </label>
 
         <div className="flex items-center gap-3">
-          <Button onClick={() => setSalvo(true)}>Salvar política</Button>
+          <Button onClick={salvar}>Salvar política</Button>
           {salvo && (
             <span className="text-sm text-muted-foreground">
               Política atualizada.

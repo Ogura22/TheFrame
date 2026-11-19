@@ -3,12 +3,12 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  formatCurrency,
-  gerarSlots,
-  salas,
-  type Reserva,
-} from "@/lib/mock-data";
+import { formatCurrency, gerarSlots, type Reserva } from "@/lib/mock-data";
+
+interface SalaBasica {
+  id: string;
+  nome: string;
+}
 
 const HORAS_GRADE = gerarSlots("07:00", "20:00", 30);
 const ROW_HEIGHT = 32; // px por bloco de 30min
@@ -33,11 +33,13 @@ export function AgendaCalendar({
   date,
   onDateChange,
   reservas,
+  salas,
   onSelect,
 }: {
   date: Date;
   onDateChange: (d: Date) => void;
   reservas: Reserva[];
+  salas: SalaBasica[];
   onSelect: (r: Reserva) => void;
 }) {
   const diaISO = toISODate(date);

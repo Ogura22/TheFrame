@@ -1,58 +1,48 @@
-"use client";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { ClienteShell } from "@/components/cliente-shell";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { cn } from "@/lib/utils";
-import { CartProvider } from "@/lib/cart-context";
-import { ReservationProvider } from "@/lib/reservation-context";
-
-const links = [
-  { href: "/cliente", label: "Reservar" },
-  { href: "/cliente/reservas", label: "Minhas Reservas" },
-  { href: "/cliente/itens", label: "Adicionar Itens" },
-  { href: "/cliente/planos", label: "Planos" },
-  { href: "/cliente/perfil", label: "Perfil" },
-];
-
-export default function ClienteLayout({
+export default async function ClienteLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const pathname = usePathname();
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: perfil } = await supabase
+    .from("perfis")
+    .select("tipo")
+    .eq("id", user.id)
+    .single();
+
+  if (perfil?.tipo !== "cliente") redirect("/");
+
+  // V1: a plataforma opera com uma clínica por enquanto — assume que o
+  // cliente reserva sempre na primeira clínica cadastrada. Quando houver
+  // mais de uma, isso vira uma tela de escolha antes daqui.
+  const { data: clinica } = await supabase
+    .from("clinicas")
+    .select("id, nome")
+    .order("created_at")
+    .limit(1)
+    .maybeSingle();
+
+  if (!clinica) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-24 text-center text-sm text-muted-foreground">
+        Nenhuma clínica cadastrada na plataforma ainda. Peça para o Super
+        Admin cadastrar uma clínica antes de reservar.
+      </div>
+    );
+  }
 
   return (
-    <ReservationProvider>
-    <CartProvider>
-      <div>
-        <div className="border-b bg-background">
-          <div className="mx-auto flex max-w-xl gap-6 overflow-x-auto px-4">
-
-            {links.map((l) => {
-              const active = pathname === l.href;
-              return (
-                <Link
-                  key={l.href}
-                  href={l.href}
-                  className={cn(
-                    "relative shrink-0 whitespace-nowrap py-3 text-sm font-medium transition-colors",
-                    active
-                      ? "text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {l.label}
-                  {active && (
-                    <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-primary" />
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-        {children}
-      </div>
-    </CartProvider>
-    </ReservationProvider>
+    <ClienteShell clinicaId={clinica.id} clinicaNome={clinica.nome}>
+      {children}
+    </ClienteShell>
   );
 }
