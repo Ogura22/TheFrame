@@ -4,19 +4,24 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
-  Avatar,
-  AvatarFallback,
-} from "@/components/ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { createClient } from "@/lib/supabase/client";
+
+const labelTipo: Record<string, string> = {
+  super_admin: "Super Admin",
+  clinica_admin: "Administração da clínica",
+  recepcao: "Recepção",
+  cliente: "Cliente",
+};
 
 function iniciais(nome: string) {
   const partes = nome.trim().split(/\s+/);
@@ -27,22 +32,36 @@ export function TopNav() {
   const router = useRouter();
   const [nome, setNome] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
+  const [tipo, setTipo] = useState<string | null>(null);
+  const [perfilOpen, setPerfilOpen] = useState(false);
+  const [saindo, setSaindo] = useState(false);
 
   useEffect(() => {
+    let ativo = true;
     const supabase = createClient();
+
     supabase.auth.getUser().then(async ({ data }) => {
-      if (!data.user) return;
+      if (!data.user || !ativo) return;
       setEmail(data.user.email ?? null);
+
       const { data: perfil } = await supabase
         .from("perfis")
-        .select("nome")
+        .select("nome, tipo")
         .eq("id", data.user.id)
         .single();
+
+      if (!ativo) return;
       setNome(perfil?.nome ?? data.user.email ?? null);
+      setTipo(perfil?.tipo ?? null);
     });
+
+    return () => {
+      ativo = false;
+    };
   }, []);
 
   async function sair() {
+    setSaindo(true);
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/login");
@@ -62,36 +81,60 @@ export function TopNav() {
         </Link>
 
         {nome && (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <button type="button">
-                  <Avatar className="size-8 cursor-pointer">
-                    <AvatarFallback className="bg-secondary text-xs font-medium">
-                      {iniciais(nome)}
-                    </AvatarFallback>
-                  </Avatar>
-                </button>
-              }
-            />
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>
-                <p className="truncate">{nome}</p>
-                {email && (
-                  <p className="truncate text-xs font-normal text-muted-foreground">
-                    {email}
-                  </p>
-                )}
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={sair}>
-                <LogOut className="size-4" />
-                Sair
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <button
+            type="button"
+            onClick={() => setPerfilOpen(true)}
+            className="rounded-full"
+          >
+            <Avatar className="size-8 cursor-pointer">
+              <AvatarFallback className="bg-secondary text-xs font-medium">
+                {iniciais(nome)}
+              </AvatarFallback>
+            </Avatar>
+          </button>
         )}
       </div>
+
+      <Dialog open={perfilOpen} onOpenChange={setPerfilOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Minha conta</DialogTitle>
+            <DialogDescription>
+              Dados de acesso ao The Frame Coworking.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-center gap-3">
+            <Avatar className="size-12">
+              <AvatarFallback className="bg-secondary text-sm font-medium">
+                {nome ? iniciais(nome) : ""}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <p className="truncate font-medium">{nome}</p>
+              <p className="truncate text-sm text-muted-foreground">
+                {email}
+              </p>
+            </div>
+          </div>
+
+          {tipo && (
+            <Badge variant="secondary" className="w-fit">
+              {labelTipo[tipo] ?? tipo}
+            </Badge>
+          )}
+
+          <Button
+            variant="outline"
+            className="mt-2 w-full"
+            disabled={saindo}
+            onClick={sair}
+          >
+            <LogOut className="size-4" />
+            {saindo ? "Saindo..." : "Sair"}
+          </Button>
+        </DialogContent>
+      </Dialog>
     </header>
   );
 }
