@@ -99,7 +99,22 @@ export const reservas: Reserva[] = [
     status: "pendente",
     pago: false,
   },
+  {
+    id: "r6",
+    dr: "Dra. Camila Souza",
+    especialidade: "Odontologia",
+    sala: "Sala 1 — Consultório Odonto",
+    dia: "2026-11-25",
+    horaInicio: "09:00",
+    horaFim: "11:00",
+    valor: 240,
+    status: "confirmada",
+    pago: true,
+  },
 ];
+
+// Cliente logado no protótipo — usado para filtrar "Minhas Reservas".
+export const clienteLogado = "Dra. Camila Souza";
 
 export const horariosDisponiveis = gerarSlots("07:00", "24:00", 30);
 

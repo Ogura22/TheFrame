@@ -8,6 +8,7 @@ import { ReservationProvider } from "@/lib/reservation-context";
 
 const links = [
   { href: "/cliente", label: "Reservar" },
+  { href: "/cliente/reservas", label: "Minhas Reservas" },
   { href: "/cliente/itens", label: "Adicionar Itens" },
 ];
 
