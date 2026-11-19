@@ -1,6 +1,16 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+type TipoPerfil = "super_admin" | "clinica_admin" | "recepcao" | "cliente";
+
+function homeParaTipo(tipo: TipoPerfil) {
+  if (tipo === "super_admin") return "/admin";
+  if (tipo === "clinica_admin" || tipo === "recepcao") return "/clinica";
+  return "/cliente";
+}
+
+const PUBLICAS = ["/login", "/cadastro"];
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -26,7 +36,51 @@ export async function updateSession(request: NextRequest) {
   );
 
   // Importante: não rodar lógica entre createServerClient e getUser().
-  await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { pathname } = request.nextUrl;
+  const ehRotaPublica = PUBLICAS.includes(pathname);
+
+  if (!user) {
+    if (ehRotaPublica) return supabaseResponse;
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
+  }
+
+  const { data: perfil } = await supabase
+    .from("perfis")
+    .select("tipo")
+    .eq("id", user.id)
+    .single();
+
+  const tipo = (perfil?.tipo as TipoPerfil) ?? "cliente";
+  const home = homeParaTipo(tipo);
+
+  if (pathname === "/" || ehRotaPublica) {
+    const url = request.nextUrl.clone();
+    url.pathname = home;
+    return NextResponse.redirect(url);
+  }
+
+  const areaPermitida =
+    (pathname.startsWith("/cliente") && tipo === "cliente") ||
+    (pathname.startsWith("/clinica") &&
+      ["clinica_admin", "recepcao", "super_admin"].includes(tipo)) ||
+    (pathname.startsWith("/admin") && tipo === "super_admin");
+
+  if (
+    (pathname.startsWith("/cliente") ||
+      pathname.startsWith("/clinica") ||
+      pathname.startsWith("/admin")) &&
+    !areaPermitida
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = home;
+    return NextResponse.redirect(url);
+  }
 
   return supabaseResponse;
 }
