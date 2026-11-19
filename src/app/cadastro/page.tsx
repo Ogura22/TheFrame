@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +9,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
 
 export default function CadastroPage() {
-  const router = useRouter();
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
@@ -50,8 +48,7 @@ export default function CadastroPage() {
       return;
     }
 
-    router.push("/");
-    router.refresh();
+    window.location.href = "/";
   }
 
   if (confirmacaoEnviada) {

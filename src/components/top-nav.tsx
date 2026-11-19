@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -29,7 +28,6 @@ function iniciais(nome: string) {
 }
 
 export function TopNav() {
-  const router = useRouter();
   const [nome, setNome] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [tipo, setTipo] = useState<string | null>(null);
@@ -90,8 +88,7 @@ export function TopNav() {
     // para dar um feedback visual claro de que a ação está acontecendo.
     setTimeout(() => {
       setPerfilOpen(false);
-      router.push("/login");
-      router.refresh();
+      window.location.href = "/login";
     }, 2000);
   }
 
