@@ -429,7 +429,15 @@ export interface Plano {
     horaFim: string;
     sala: string;
   };
+  itensInclusosIds?: string[];
   ativo: boolean;
+}
+
+// Comissão da plataforma por tipo de plano: avulso e flex são calculados
+// automaticamente no checkout de cada reserva; fixo é negociado caso a caso.
+export function comissaoLabelPorTipo(tipo: TipoPlano) {
+  if (tipo === "fixo") return "Sob consulta";
+  return "8% + taxa de gateway, calculada no checkout de cada reserva";
 }
 
 // Tipos de plano que o Super Admin liberou para esta clínica oferecer.
@@ -457,6 +465,7 @@ export const planos: Plano[] = [
     nome: "Flex 20h/mês",
     valor: 800,
     horasIncluidas: 20,
+    itensInclusosIds: ["i1", "i2"],
     ativo: true,
   },
   {
@@ -470,6 +479,7 @@ export const planos: Plano[] = [
       horaFim: "12:00",
       sala: "Sala 1 — Consultório Odonto",
     },
+    itensInclusosIds: ["i1", "i2", "i7"],
     ativo: true,
   },
 ];

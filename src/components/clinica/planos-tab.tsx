@@ -29,7 +29,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  comissaoLabelPorTipo,
   formatCurrency,
+  itens,
   planos as planosIniciais,
   salas,
   tiposPlanoHabilitados,
@@ -65,11 +67,19 @@ function NovoPlanoDialog({
   const [horaInicio, setHoraInicio] = useState("09:00");
   const [horaFim, setHoraFim] = useState("12:00");
   const [sala, setSala] = useState(salas[0].nome);
+  const [itensInclusosIds, setItensInclusosIds] = useState<string[]>([]);
 
   function limpar() {
     setNome("");
     setValor("");
     setHorasIncluidas("");
+    setItensInclusosIds([]);
+  }
+
+  function toggleItem(id: string) {
+    setItensInclusosIds((atual) =>
+      atual.includes(id) ? atual.filter((i) => i !== id) : [...atual, id]
+    );
   }
 
   function handleCriar() {
@@ -85,6 +95,7 @@ function NovoPlanoDialog({
         tipo === "fixo"
           ? { diaSemana, horaInicio, horaFim, sala }
           : undefined,
+      itensInclusosIds: itensInclusosIds.length ? itensInclusosIds : undefined,
       ativo: true,
     });
     limpar();
@@ -212,6 +223,29 @@ function NovoPlanoDialog({
               </div>
             </>
           )}
+
+          <div className="space-y-1.5">
+            <Label>Itens inclusos neste plano (opcional)</Label>
+            <div className="max-h-40 space-y-1.5 overflow-y-auto rounded-md border p-2">
+              {itens.map((i) => (
+                <label
+                  key={i.id}
+                  className="flex items-center gap-2 text-sm"
+                >
+                  <input
+                    type="checkbox"
+                    checked={itensInclusosIds.includes(i.id)}
+                    onChange={() => toggleItem(i.id)}
+                  />
+                  {i.nome}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Comissão da plataforma: {comissaoLabelPorTipo(tipo)}
+          </p>
         </div>
 
         <DialogFooter>
@@ -271,6 +305,18 @@ export function PlanosTab() {
                 {p.recorrencia &&
                   ` · ${p.recorrencia.diaSemana} ${p.recorrencia.horaInicio}–${p.recorrencia.horaFim}`}
               </p>
+              <p className="text-xs text-muted-foreground">
+                Comissão: {comissaoLabelPorTipo(p.tipo)}
+              </p>
+              {p.itensInclusosIds && p.itensInclusosIds.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Itens inclusos:{" "}
+                  {p.itensInclusosIds
+                    .map((id) => itens.find((i) => i.id === id)?.nome)
+                    .filter(Boolean)
+                    .join(", ")}
+                </p>
+              )}
             </div>
             {p.tipo !== "avulso" && (
               <Button

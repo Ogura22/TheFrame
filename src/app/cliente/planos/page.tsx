@@ -15,7 +15,9 @@ import { cn } from "@/lib/utils";
 import {
   assinaturasClientes,
   clienteLogado,
+  comissaoLabelPorTipo,
   formatCurrency,
+  itens,
   planos,
   tiposPlanoInfo,
 } from "@/lib/mock-data";
@@ -86,6 +88,18 @@ export default function PlanosPage() {
                     {p.recorrencia.sala}
                   </p>
                 )}
+                {p.itensInclusosIds && p.itensInclusosIds.length > 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    Inclui:{" "}
+                    {p.itensInclusosIds
+                      .map((id) => itens.find((i) => i.id === id)?.nome)
+                      .filter(Boolean)
+                      .join(", ")}
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Comissão da plataforma: {comissaoLabelPorTipo(p.tipo)}
+                </p>
                 {!ativo && (
                   <Button
                     size="sm"
