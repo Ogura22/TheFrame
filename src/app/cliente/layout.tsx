@@ -10,6 +10,8 @@ const links = [
   { href: "/cliente", label: "Reservar" },
   { href: "/cliente/reservas", label: "Minhas Reservas" },
   { href: "/cliente/itens", label: "Adicionar Itens" },
+  { href: "/cliente/planos", label: "Planos" },
+  { href: "/cliente/perfil", label: "Perfil" },
 ];
 
 export default function ClienteLayout({
@@ -24,7 +26,8 @@ export default function ClienteLayout({
     <CartProvider>
       <div>
         <div className="border-b bg-background">
-          <div className="mx-auto flex max-w-xl gap-6 px-4">
+          <div className="mx-auto flex max-w-xl gap-6 overflow-x-auto px-4">
+
             {links.map((l) => {
               const active = pathname === l.href;
               return (
@@ -32,7 +35,7 @@ export default function ClienteLayout({
                   key={l.href}
                   href={l.href}
                   className={cn(
-                    "relative py-3 text-sm font-medium transition-colors",
+                    "relative shrink-0 whitespace-nowrap py-3 text-sm font-medium transition-colors",
                     active
                       ? "text-foreground"
                       : "text-muted-foreground hover:text-foreground"

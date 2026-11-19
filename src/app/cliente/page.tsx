@@ -35,6 +35,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { FieldBox } from "@/components/field-box";
 import { TimeRangeSlider } from "@/components/time-range-slider";
 import { ItemsCatalog } from "@/components/items-catalog";
+import { TermsGateDialog } from "@/components/terms-acceptance";
 import { useCart } from "@/lib/cart-context";
 import { useReservation } from "@/lib/reservation-context";
 import {
@@ -44,7 +45,6 @@ import {
   horariosDisponiveis,
   itens,
   salas,
-  termosContratoExemplo,
 } from "@/lib/mock-data";
 
 const COMISSAO_PCT = 0.08;
@@ -68,10 +68,9 @@ export default function ClientePage() {
     limparSolicitacaoCheckout,
     reset: resetReserva,
   } = useReservation();
-  const [aceite, setAceite] = useState(false);
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
-  const [confirmado, setConfirmado] = useState(false);
   const [termosOpen, setTermosOpen] = useState(false);
+  const [confirmado, setConfirmado] = useState(false);
   const { cart: itemsCart, setQty: setItemQty, clear: clearCart } = useCart();
 
   useEffect(() => {
@@ -80,6 +79,17 @@ export default function ClientePage() {
       limparSolicitacaoCheckout();
     }
   }, [abrirCheckout, limparSolicitacaoCheckout]);
+
+  function abrirConfirmacao() {
+    setConfirmModalOpen(true);
+  }
+
+  function finalizarReserva() {
+    setConfirmModalOpen(false);
+    setConfirmado(true);
+    clearCart();
+    resetReserva();
+  }
 
   const sala = useMemo(() => salas.find((s) => s.id === salaId)!, [salaId]);
 
@@ -237,11 +247,7 @@ export default function ClientePage() {
             <p className="text-xs text-muted-foreground">Total</p>
             <p className="text-lg font-semibold">{formatCurrency(total)}</p>
           </div>
-          <Button
-            size="lg"
-            disabled={!range}
-            onClick={() => setConfirmModalOpen(true)}
-          >
+          <Button size="lg" disabled={!range} onClick={abrirConfirmacao}>
             Reservar
           </Button>
           <a
@@ -321,54 +327,21 @@ export default function ClientePage() {
               />
             </div>
 
-            <label className="flex items-start gap-2 pt-2 text-xs text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={aceite}
-                onChange={(e) => setAceite(e.target.checked)}
-                className="mt-0.5"
-              />
-              Li e estou de acordo com o{" "}
-              <button
-                type="button"
-                onClick={() => setTermosOpen(true)}
-                className="font-medium text-foreground underline underline-offset-2"
-              >
-                contrato de locação da sala
-              </button>{" "}
-              e com a política de cancelamento da clínica.
-            </label>
           </div>
 
           <DialogFooter>
-            <Button
-              disabled={!aceite}
-              onClick={() => {
-                setConfirmModalOpen(false);
-                setConfirmado(true);
-                clearCart();
-                resetReserva();
-              }}
-            >
-              Confirmar e pagar
+            <Button onClick={() => setTermosOpen(true)}>
+              Seguir com a confirmação
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={termosOpen} onOpenChange={setTermosOpen}>
-        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Contrato de locação — modelo</DialogTitle>
-            <DialogDescription>
-              Documento de exemplo para validação do protótipo.
-            </DialogDescription>
-          </DialogHeader>
-          <pre className="whitespace-pre-wrap font-sans text-xs text-muted-foreground">
-            {termosContratoExemplo}
-          </pre>
-        </DialogContent>
-      </Dialog>
+      <TermsGateDialog
+        open={termosOpen}
+        onOpenChange={setTermosOpen}
+        onConfirm={finalizarReserva}
+      />
     </div>
   );
 }

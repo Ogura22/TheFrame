@@ -10,6 +10,10 @@ import {
 } from "@/components/ui/tabs";
 import { AgendaCalendar } from "@/components/agenda-calendar";
 import { StockManager } from "@/components/stock-manager";
+import { ClientesTab } from "@/components/clinica/clientes-tab";
+import { PoliticaTab } from "@/components/clinica/politica-tab";
+import { NotificacoesTab } from "@/components/clinica/notificacoes-tab";
+import { PlanosTab } from "@/components/clinica/planos-tab";
 import { cn } from "@/lib/utils";
 import {
   Card,
@@ -76,9 +80,13 @@ export default function ClinicaPage() {
       </div>
 
       <Tabs defaultValue="agenda" className="mt-8">
-        <TabsList>
+        <TabsList className="flex w-full justify-start overflow-x-auto">
           <TabsTrigger value="agenda">Agenda</TabsTrigger>
+          <TabsTrigger value="clientes">Clientes</TabsTrigger>
           <TabsTrigger value="estoque">Estoque</TabsTrigger>
+          <TabsTrigger value="planos">Planos</TabsTrigger>
+          <TabsTrigger value="politica">Política</TabsTrigger>
+          <TabsTrigger value="notificacoes">Notificações</TabsTrigger>
           <TabsTrigger value="contrato">Contrato</TabsTrigger>
           <TabsTrigger value="financeiro">Financeiro</TabsTrigger>
         </TabsList>
@@ -187,6 +195,22 @@ export default function ClinicaPage() {
               <StockManager />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="clientes" className="mt-4">
+          <ClientesTab />
+        </TabsContent>
+
+        <TabsContent value="planos" className="mt-4">
+          <PlanosTab />
+        </TabsContent>
+
+        <TabsContent value="politica" className="mt-4">
+          <PoliticaTab />
+        </TabsContent>
+
+        <TabsContent value="notificacoes" className="mt-4">
+          <NotificacoesTab />
         </TabsContent>
 
         <TabsContent value="contrato" className="mt-4">

@@ -285,6 +285,213 @@ Ao confirmar a reserva, o(a) LOCATÁRIO(A) declara ter lido e concordado integra
 
 (Este é um modelo de exemplo para fins de validação do protótipo — o contrato final deverá ser revisado por profissional jurídico antes do uso em produção.)`;
 
+// ---------- Perfil do cliente ----------
+
+export interface ClienteDetalhe {
+  nome: string;
+  especialidade: string;
+  foto: string;
+  cpf: string;
+  enderecoCobranca: string;
+  celular: string;
+  email: string;
+}
+
+export const clientesDetalhe: ClienteDetalhe[] = [
+  {
+    nome: "Dra. Camila Souza",
+    especialidade: "Odontologia",
+    foto: "https://picsum.photos/seed/camila/200/200",
+    cpf: "123.456.789-00",
+    enderecoCobranca: "Rua Augusta, 1200, apto 42 — São Paulo, SP",
+    celular: "(11) 98888-1234",
+    email: "camila.souza@email.com",
+  },
+  {
+    nome: "Dr. Rafael Lima",
+    especialidade: "Harmonização Facial",
+    foto: "https://picsum.photos/seed/rafael/200/200",
+    cpf: "987.654.321-00",
+    enderecoCobranca: "Av. Paulista, 900, cj 15 — São Paulo, SP",
+    celular: "(11) 97777-5678",
+    email: "rafael.lima@email.com",
+  },
+  {
+    nome: "Dra. Beatriz Nogueira",
+    especialidade: "Odontologia",
+    foto: "https://picsum.photos/seed/beatriz/200/200",
+    cpf: "456.789.123-00",
+    enderecoCobranca: "Rua Oscar Freire, 300 — São Paulo, SP",
+    celular: "(11) 96666-9012",
+    email: "beatriz.nogueira@email.com",
+  },
+  {
+    nome: "Dr. Thiago Alencar",
+    especialidade: "Harmonização Facial",
+    foto: "https://picsum.photos/seed/thiago/200/200",
+    cpf: "321.654.987-00",
+    enderecoCobranca: "Alameda Santos, 500 — São Paulo, SP",
+    celular: "(11) 95555-3456",
+    email: "thiago.alencar@email.com",
+  },
+];
+
+// ---------- Política de cancelamento ----------
+
+export interface PoliticaCancelamento {
+  horasAntecedenciaGratuita: number;
+  percentualCobradoForaPrazo: number;
+  reagendamentoRequerAprovacao: boolean;
+}
+
+export const politicaCancelamentoPadrao: PoliticaCancelamento = {
+  horasAntecedenciaGratuita: 48,
+  percentualCobradoForaPrazo: 100,
+  reagendamentoRequerAprovacao: true,
+};
+
+// ---------- Notificações ----------
+
+export type TipoNotificacao = "reserva" | "material" | "pagamento" | "reagendamento";
+
+export interface Notificacao {
+  id: string;
+  tipo: TipoNotificacao;
+  titulo: string;
+  descricao: string;
+  dataHoraISO: string;
+  lida: boolean;
+}
+
+export const notificacoes: Notificacao[] = [
+  {
+    id: "n1",
+    tipo: "reagendamento",
+    titulo: "Solicitação de reagendamento",
+    descricao: "Dra. Camila Souza pediu para mudar o horário da reserva de 12/11.",
+    dataHoraISO: "2026-11-17T14:32:00",
+    lida: false,
+  },
+  {
+    id: "n2",
+    tipo: "material",
+    titulo: "Material just in time solicitado",
+    descricao: "Dr. Rafael Lima solicitou Ácido hialurônico 1ml e Toxina botulínica para a reserva de hoje.",
+    dataHoraISO: "2026-11-17T09:10:00",
+    lida: false,
+  },
+  {
+    id: "n3",
+    tipo: "reserva",
+    titulo: "Nova reserva confirmada",
+    descricao: "Dra. Beatriz Nogueira reservou a Sala 3 para 11/11, 08:00–10:00.",
+    dataHoraISO: "2026-11-15T18:05:00",
+    lida: true,
+  },
+  {
+    id: "n4",
+    tipo: "pagamento",
+    titulo: "Pagamento pendente",
+    descricao: "A reserva de Dr. Rafael Lima (10/11, 14:00–17:00) ainda não foi paga.",
+    dataHoraISO: "2026-11-10T20:00:00",
+    lida: true,
+  },
+];
+
+// ---------- Planos ----------
+
+export type TipoPlano = "avulso" | "flex" | "fixo";
+
+export const tiposPlanoInfo: Record<TipoPlano, { label: string; descricao: string }> = {
+  avulso: {
+    label: "Avulso",
+    descricao: "Paga por reserva, sem compromisso mensal.",
+  },
+  flex: {
+    label: "Flex",
+    descricao: "Pacote de horas mensal com valor/hora reduzido.",
+  },
+  fixo: {
+    label: "Fixo",
+    descricao: "Assinatura mensal com horário recorrente reservado.",
+  },
+};
+
+export interface Plano {
+  id: string;
+  tipo: TipoPlano;
+  nome: string;
+  valor: number;
+  horasIncluidas?: number;
+  recorrencia?: {
+    diaSemana: string;
+    horaInicio: string;
+    horaFim: string;
+    sala: string;
+  };
+  ativo: boolean;
+}
+
+// Tipos de plano que o Super Admin liberou para esta clínica oferecer.
+export const tiposPlanoHabilitados: TipoPlano[] = ["avulso", "flex", "fixo"];
+
+export const planos: Plano[] = [
+  {
+    id: "p-avulso",
+    tipo: "avulso",
+    nome: "Avulso",
+    valor: 0,
+    ativo: true,
+  },
+  {
+    id: "p-flex-10",
+    tipo: "flex",
+    nome: "Flex 10h/mês",
+    valor: 450,
+    horasIncluidas: 10,
+    ativo: true,
+  },
+  {
+    id: "p-flex-20",
+    tipo: "flex",
+    nome: "Flex 20h/mês",
+    valor: 800,
+    horasIncluidas: 20,
+    ativo: true,
+  },
+  {
+    id: "p-fixo-terca",
+    tipo: "fixo",
+    nome: "Fixo terças — Sala 1",
+    valor: 900,
+    recorrencia: {
+      diaSemana: "Terça-feira",
+      horaInicio: "09:00",
+      horaFim: "12:00",
+      sala: "Sala 1 — Consultório Odonto",
+    },
+    ativo: true,
+  },
+];
+
+export interface AssinaturaCliente {
+  clienteNome: string;
+  planoId: string;
+  horasRestantes?: number;
+  status: "ativa" | "cancelada";
+  proximaCobrancaISO: string;
+}
+
+export const assinaturasClientes: AssinaturaCliente[] = [
+  {
+    clienteNome: "Dra. Camila Souza",
+    planoId: "p-flex-10",
+    horasRestantes: 4,
+    status: "ativa",
+    proximaCobrancaISO: "2026-12-01",
+  },
+];
+
 export function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }

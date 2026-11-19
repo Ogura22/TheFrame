@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { CalendarIcon, Clock } from "lucide-react";
 import {
   Tabs,
@@ -27,7 +27,8 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { FieldBox } from "@/components/field-box";
-import { TimeRangeSlider } from "@/components/time-range-slider";
+import { TimeRangeSelect } from "@/components/time-range-select";
+import { TermsGateDialog } from "@/components/terms-acceptance";
 import {
   clienteLogado,
   formatCurrency,
@@ -38,6 +39,9 @@ import {
   type Reserva,
   type StatusReserva,
 } from "@/lib/mock-data";
+
+const COMISSAO_PCT = 0.08;
+const TAXA_GATEWAY_PCT = 0.0299;
 
 function toISODate(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -66,6 +70,7 @@ export default function MinhasReservasPage() {
   const [reagendando, setReagendando] = useState<Reserva | null>(null);
   const [novaData, setNovaData] = useState<Date | undefined>(undefined);
   const [novoRange, setNovoRange] = useState<[string, string] | null>(null);
+  const [termosReagendamentoOpen, setTermosReagendamentoOpen] = useState(false);
 
   const hojeISO = toISODate(new Date());
 
@@ -79,6 +84,13 @@ export default function MinhasReservasPage() {
   const horasNovoRange = novoRange
     ? horasEntre(novoRange[0], novoRange[1])
     : 0;
+  const valorHoraReagendando = reagendando
+    ? reagendando.valor / horasEntre(reagendando.horaInicio, reagendando.horaFim)
+    : 0;
+  const novoValorBase = valorHoraReagendando * horasNovoRange;
+  const novaComissao = novoValorBase * COMISSAO_PCT;
+  const novaTaxaGateway = novoValorBase * TAXA_GATEWAY_PCT;
+  const novoTotal = novoValorBase + novaComissao + novaTaxaGateway;
 
   function abrirReagendamento(r: Reserva) {
     setReagendando(r);
@@ -244,7 +256,7 @@ export default function MinhasReservasPage() {
 
             <div>
               <p className="mb-2 text-sm font-medium">Novo horário</p>
-              <TimeRangeSlider
+              <TimeRangeSelect
                 slots={horariosDisponiveis}
                 blocked={horariosBloqueados}
                 value={novoRange}
@@ -255,21 +267,51 @@ export default function MinhasReservasPage() {
             {novoRange && (
               <>
                 <Separator />
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Nova duração</span>
-                  <span>{formatDuracao(horasNovoRange)}</span>
+                <div className="space-y-1.5 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Nova duração</span>
+                    <span>{formatDuracao(horasNovoRange)}</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Locação da sala</span>
+                    <span>{formatCurrency(novoValorBase)}</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Comissão plataforma (8%)</span>
+                    <span>{formatCurrency(novaComissao)}</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Taxa gateway (2,99%)</span>
+                    <span>{formatCurrency(novaTaxaGateway)}</span>
+                  </div>
+                  <Separator className="my-1" />
+                  <div className="flex justify-between font-semibold">
+                    <span>Novo total</span>
+                    <span>{formatCurrency(novoTotal)}</span>
+                  </div>
                 </div>
               </>
             )}
+
           </div>
 
           <DialogFooter>
-            <Button disabled={!novaData || !novoRange} onClick={confirmarReagendamento}>
-              Solicitar reagendamento
+            <Button
+              disabled={!novaData || !novoRange}
+              onClick={() => setTermosReagendamentoOpen(true)}
+            >
+              Seguir com a confirmação
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <TermsGateDialog
+        open={termosReagendamentoOpen}
+        onOpenChange={setTermosReagendamentoOpen}
+        onConfirm={confirmarReagendamento}
+        confirmLabel="Confirmar reagendamento"
+      />
     </div>
   );
 }
