@@ -15,27 +15,35 @@ export default async function ClienteLayout({
 
   const { data: perfil } = await supabase
     .from("perfis")
-    .select("tipo")
+    .select("tipo, clinica_id")
     .eq("id", user.id)
     .single();
 
   if (perfil?.tipo !== "cliente") redirect("/");
 
-  // V1: a plataforma opera com uma clínica por enquanto — assume que o
-  // cliente reserva sempre na primeira clínica cadastrada. Quando houver
-  // mais de uma, isso vira uma tela de escolha antes daqui.
+  // A clínica do cliente é decidida no cadastro (ver trigger handle_new_user)
+  // e gravada no próprio perfil — não depende mais de qual clínica foi
+  // criada primeiro no sistema.
+  if (!perfil.clinica_id) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-24 text-center text-sm text-muted-foreground">
+        Sua conta ainda não está vinculada a nenhuma clínica. Fale com o
+        suporte para resolver isso.
+      </div>
+    );
+  }
+
   const { data: clinica } = await supabase
     .from("clinicas")
     .select("id, nome")
-    .order("created_at")
-    .limit(1)
-    .maybeSingle();
+    .eq("id", perfil.clinica_id)
+    .single();
 
   if (!clinica) {
     return (
       <div className="mx-auto max-w-md px-4 py-24 text-center text-sm text-muted-foreground">
-        Nenhuma clínica cadastrada na plataforma ainda. Peça para o Super
-        Admin cadastrar uma clínica antes de reservar.
+        A clínica vinculada à sua conta não foi encontrada. Fale com o
+        suporte.
       </div>
     );
   }

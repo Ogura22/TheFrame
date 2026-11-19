@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,8 +20,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useClinica } from "@/lib/clinica-context";
-import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/mock-data";
 import type { SalaDb } from "@/lib/db-types";
 
@@ -116,40 +114,18 @@ function NovaSalaDialog({
   );
 }
 
-export function SalasTab() {
-  const { clinicaId } = useClinica();
-  const [lista, setLista] = useState<SalaDb[]>([]);
-  const [carregando, setCarregando] = useState(true);
+export function SalasTab({
+  salas,
+  carregando,
+  onCriar,
+  onRemover,
+}: {
+  salas: SalaDb[];
+  carregando: boolean;
+  onCriar: (dados: { nome: string; capacidade: number; valor_hora: number }) => void;
+  onRemover: (id: string) => void;
+}) {
   const [novaOpen, setNovaOpen] = useState(false);
-
-  useEffect(() => {
-    const supabase = createClient();
-    supabase
-      .from("salas")
-      .select("*")
-      .eq("clinica_id", clinicaId)
-      .order("created_at")
-      .then(({ data }) => {
-        setLista(data ?? []);
-        setCarregando(false);
-      });
-  }, [clinicaId]);
-
-  async function criar(dados: { nome: string; capacidade: number; valor_hora: number }) {
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from("salas")
-      .insert({ ...dados, clinica_id: clinicaId })
-      .select("*")
-      .single();
-    if (!error && data) setLista((l) => [...l, data]);
-  }
-
-  async function remover(id: string) {
-    const supabase = createClient();
-    const { error } = await supabase.from("salas").delete().eq("id", id);
-    if (!error) setLista((l) => l.filter((s) => s.id !== id));
-  }
 
   return (
     <Card>
@@ -171,13 +147,13 @@ export function SalasTab() {
             Carregando...
           </p>
         )}
-        {!carregando && lista.length === 0 && (
+        {!carregando && salas.length === 0 && (
           <p className="py-6 text-center text-sm text-muted-foreground">
             Nenhuma sala cadastrada ainda. Crie a primeira para liberar
             reservas.
           </p>
         )}
-        {lista.map((s) => (
+        {salas.map((s) => (
           <div
             key={s.id}
             className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
@@ -192,7 +168,7 @@ export function SalasTab() {
               variant="ghost"
               size="icon-sm"
               className="text-muted-foreground hover:text-destructive"
-              onClick={() => remover(s.id)}
+              onClick={() => onRemover(s.id)}
             >
               <Trash2 className="size-4" />
             </Button>
@@ -200,7 +176,7 @@ export function SalasTab() {
         ))}
       </CardContent>
 
-      <NovaSalaDialog open={novaOpen} onOpenChange={setNovaOpen} onCriar={criar} />
+      <NovaSalaDialog open={novaOpen} onOpenChange={setNovaOpen} onCriar={onCriar} />
     </Card>
   );
 }

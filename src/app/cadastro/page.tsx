@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +10,16 @@ import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
 
 export default function CadastroPage() {
+  return (
+    <Suspense>
+      <CadastroForm />
+    </Suspense>
+  );
+}
+
+function CadastroForm() {
+  const searchParams = useSearchParams();
+  const clinicaId = searchParams.get("clinica");
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
@@ -27,7 +38,7 @@ export default function CadastroPage() {
       email,
       password: senha,
       options: {
-        data: { nome, celular },
+        data: { nome, celular, clinica_id: clinicaId ?? undefined },
       },
     });
 

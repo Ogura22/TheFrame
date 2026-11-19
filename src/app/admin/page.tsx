@@ -122,6 +122,7 @@ export default function AdminPage() {
                       <TableHead>Cidade</TableHead>
                       <TableHead>Salas</TableHead>
                       <TableHead>Checkout</TableHead>
+                      <TableHead />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -143,6 +144,15 @@ export default function AdminPage() {
                           >
                             {c.checkout === "automatico" ? "automático" : "com confirmação"}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            render={<Link href={`/admin/clinicas/${c.id}`} />}
+                          >
+                            Editar
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}

@@ -65,6 +65,7 @@ export default function ClinicaPage() {
   const { clinicaId, clinicaNome } = useClinica();
   const [reservas, setReservas] = useState<ReservaView[]>([]);
   const [salas, setSalas] = useState<SalaDb[]>([]);
+  const [carregandoSalas, setCarregandoSalas] = useState(true);
   const [carregandoReservas, setCarregandoReservas] = useState(true);
   const [selecionada, setSelecionada] = useState<ReservaView | null>(null);
   const [visao, setVisao] = useState<"lista" | "calendario">("calendario");
@@ -80,7 +81,11 @@ export default function ClinicaPage() {
         .from("salas")
         .select("*")
         .eq("clinica_id", clinicaId)
-        .then(({ data }) => setSalas(data ?? []));
+        .order("created_at")
+        .then(({ data }) => {
+          setSalas(data ?? []);
+          setCarregandoSalas(false);
+        });
 
       const { data } = await supabase
         .from("reservas")
@@ -114,6 +119,22 @@ export default function ClinicaPage() {
 
     carregar();
   }, [clinicaId]);
+
+  async function criarSala(dados: { nome: string; capacidade: number; valor_hora: number }) {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("salas")
+      .insert({ ...dados, clinica_id: clinicaId })
+      .select("*")
+      .single();
+    if (!error && data) setSalas((l) => [...l, data]);
+  }
+
+  async function removerSala(id: string) {
+    const supabase = createClient();
+    const { error } = await supabase.from("salas").delete().eq("id", id);
+    if (!error) setSalas((l) => l.filter((s) => s.id !== id));
+  }
 
   const faturamentoBruto = reservas.reduce((acc, r) => acc + r.valor, 0);
   const comissao = faturamentoBruto * 0.08;
@@ -259,7 +280,12 @@ export default function ClinicaPage() {
         </TabsContent>
 
         <TabsContent value="salas" className="mt-4">
-          <SalasTab />
+          <SalasTab
+            salas={salas}
+            carregando={carregandoSalas}
+            onCriar={criarSala}
+            onRemover={removerSala}
+          />
         </TabsContent>
 
         <TabsContent value="estoque" className="mt-4">
