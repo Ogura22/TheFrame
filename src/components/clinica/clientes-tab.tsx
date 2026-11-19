@@ -53,7 +53,7 @@ export function ClientesTab() {
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{c.nome}</p>
               <p className="text-xs text-muted-foreground">
-                {c.especialidade} · {c.celular}
+                {c.especialidade} · {c.registroProfissional} · {c.celular}
               </p>
             </div>
           </button>
@@ -76,6 +76,12 @@ export function ClientesTab() {
                 <div>
                   <p className="text-xs text-muted-foreground">CPF</p>
                   <p>{selecionado.cpf}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    Registro profissional
+                  </p>
+                  <p>{selecionado.registroProfissional}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Celular</p>

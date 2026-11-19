@@ -61,9 +61,22 @@ export default function PerfilPage() {
               }
             />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="cpf">CPF</Label>
-            <Input id="cpf" value={perfil.cpf} disabled />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="cpf">CPF</Label>
+              <Input id="cpf" value={perfil.cpf} disabled />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="registro">Registro profissional (CRO/CRM)</Label>
+              <Input
+                id="registro"
+                value={perfil.registroProfissional}
+                onChange={(e) =>
+                  setPerfil({ ...perfil, registroProfissional: e.target.value })
+                }
+                placeholder="Ex: CRO-SP 12345"
+              />
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="endereco">Endereço de cobrança</Label>

@@ -292,6 +292,7 @@ export interface ClienteDetalhe {
   especialidade: string;
   foto: string;
   cpf: string;
+  registroProfissional: string;
   enderecoCobranca: string;
   celular: string;
   email: string;
@@ -303,6 +304,7 @@ export const clientesDetalhe: ClienteDetalhe[] = [
     especialidade: "Odontologia",
     foto: "https://picsum.photos/seed/camila/200/200",
     cpf: "123.456.789-00",
+    registroProfissional: "CRO-SP 45213",
     enderecoCobranca: "Rua Augusta, 1200, apto 42 — São Paulo, SP",
     celular: "(11) 98888-1234",
     email: "camila.souza@email.com",
@@ -312,6 +314,7 @@ export const clientesDetalhe: ClienteDetalhe[] = [
     especialidade: "Harmonização Facial",
     foto: "https://picsum.photos/seed/rafael/200/200",
     cpf: "987.654.321-00",
+    registroProfissional: "CRM-SP 112233",
     enderecoCobranca: "Av. Paulista, 900, cj 15 — São Paulo, SP",
     celular: "(11) 97777-5678",
     email: "rafael.lima@email.com",
@@ -321,6 +324,7 @@ export const clientesDetalhe: ClienteDetalhe[] = [
     especialidade: "Odontologia",
     foto: "https://picsum.photos/seed/beatriz/200/200",
     cpf: "456.789.123-00",
+    registroProfissional: "CRO-SP 78901",
     enderecoCobranca: "Rua Oscar Freire, 300 — São Paulo, SP",
     celular: "(11) 96666-9012",
     email: "beatriz.nogueira@email.com",
@@ -330,6 +334,7 @@ export const clientesDetalhe: ClienteDetalhe[] = [
     especialidade: "Harmonização Facial",
     foto: "https://picsum.photos/seed/thiago/200/200",
     cpf: "321.654.987-00",
+    registroProfissional: "CRM-SP 445566",
     enderecoCobranca: "Alameda Santos, 500 — São Paulo, SP",
     celular: "(11) 95555-3456",
     email: "thiago.alencar@email.com",
