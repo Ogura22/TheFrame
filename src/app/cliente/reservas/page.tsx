@@ -29,6 +29,12 @@ import { Calendar } from "@/components/ui/calendar";
 import { FieldBox } from "@/components/field-box";
 import { TimeRangeSelect } from "@/components/time-range-select";
 import { TermsGateDialog } from "@/components/terms-acceptance";
+import { List } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { WeekView } from "@/components/agenda/week-view";
+import { MonthView } from "@/components/agenda/month-view";
+import { ViewSwitcher } from "@/components/agenda/view-switcher";
+import type { EventoAgenda, ModoVisaoAgenda } from "@/lib/agenda-types";
 import { formatCurrency, formatDuracao, gerarSlots } from "@/lib/mock-data";
 import type { PlanoDb, ReservaDb, StatusReservaDb } from "@/lib/db-types";
 import { createClient } from "@/lib/supabase/client";
@@ -72,6 +78,8 @@ export default function MinhasReservasPage() {
   const [termosReagendamentoOpen, setTermosReagendamentoOpen] = useState(false);
   const [planoAtivo, setPlanoAtivo] = useState<PlanoDb | null>(null);
   const [politicaGeral, setPoliticaGeral] = useState<number | null>(null);
+  const [visao, setVisao] = useState<"lista" | ModoVisaoAgenda>("lista");
+  const [diaSelecionado, setDiaSelecionado] = useState(new Date());
 
   useEffect(() => {
     carregarReservas();
@@ -167,6 +175,26 @@ export default function MinhasReservasPage() {
   const novaTaxaGateway = novoValorBase * TAXA_GATEWAY_PCT;
   const novoTotal = novoValorBase + novaComissao + novaTaxaGateway;
 
+  const eventos: EventoAgenda[] = lista.map((r) => ({
+    id: r.id,
+    dia: r.dia,
+    horaInicio: r.hora_inicio.slice(0, 5),
+    horaFim: r.hora_fim.slice(0, 5),
+    titulo: r.sala_nome,
+    status: r.status,
+  }));
+
+  const doDiaSelecionado = lista
+    .filter((r) => r.dia === toISODate(diaSelecionado))
+    .sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
+
+  function selecionarEvento(id: string) {
+    const r = lista.find((x) => x.id === id);
+    if (r && r.dia >= hojeISO && r.status !== "cancelada") {
+      abrirReagendamento(r);
+    }
+  }
+
   function abrirReagendamento(r: ReservaView) {
     setReagendando(r);
     setNovaData(new Date(`${r.dia}T00:00:00`));
@@ -249,37 +277,135 @@ export default function MinhasReservasPage() {
 
   return (
     <div className="mx-auto max-w-xl px-4 pt-6 pb-16">
-      <h1 className="text-2xl font-semibold tracking-tight">Minhas Reservas</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Consulte, reagende ou cancele suas reservas.
-      </p>
+      <div className="mt-1 flex items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
+          Consulte, reagende ou cancele suas reservas.
+        </p>
+      </div>
 
-      <Tabs defaultValue="proximas" className="mt-6">
-        <TabsList>
-          <TabsTrigger value="proximas">Próximas</TabsTrigger>
-          <TabsTrigger value="historico">Histórico</TabsTrigger>
-        </TabsList>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <ViewSwitcher
+          modo={visao === "lista" ? "dia" : visao}
+          onChange={setVisao}
+        />
+        <button
+          onClick={() => setVisao("lista")}
+          className={cn(
+            "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+            visao === "lista"
+              ? "bg-card text-foreground shadow-sm ring-1 ring-foreground/10"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <List className="size-3.5" />
+          Lista
+        </button>
+      </div>
 
-        <TabsContent value="proximas" className="mt-4 space-y-3">
-          {proximas.length === 0 ? (
+      {visao === "lista" && (
+        <Tabs defaultValue="proximas" className="mt-4">
+          <TabsList>
+            <TabsTrigger value="proximas">Próximas</TabsTrigger>
+            <TabsTrigger value="historico">Histórico</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="proximas" className="mt-4 space-y-3">
+            {proximas.length === 0 ? (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                Nenhuma reserva futura.
+              </p>
+            ) : (
+              proximas.map((r) => <ReservaCard key={r.id} r={r} podeAgir />)
+            )}
+          </TabsContent>
+
+          <TabsContent value="historico" className="mt-4 space-y-3">
+            {historico.length === 0 ? (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                Nenhuma reserva no histórico ainda.
+              </p>
+            ) : (
+              historico.map((r) => <ReservaCard key={r.id} r={r} podeAgir={false} />)
+            )}
+          </TabsContent>
+        </Tabs>
+      )}
+
+      {visao === "dia" && (
+        <div className="mt-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="icon-sm"
+                onClick={() =>
+                  setDiaSelecionado(
+                    new Date(diaSelecionado.getTime() - 86400000)
+                  )
+                }
+              >
+                ‹
+              </Button>
+              <Button
+                variant="outline"
+                size="icon-sm"
+                onClick={() =>
+                  setDiaSelecionado(
+                    new Date(diaSelecionado.getTime() + 86400000)
+                  )
+                }
+              >
+                ›
+              </Button>
+              <span className="ml-2 text-sm font-medium capitalize">
+                {diaSelecionado.toLocaleDateString("pt-BR", {
+                  weekday: "long",
+                  day: "2-digit",
+                  month: "long",
+                })}
+              </span>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setDiaSelecionado(new Date())}>
+              Hoje
+            </Button>
+          </div>
+          {doDiaSelecionado.length === 0 ? (
             <p className="py-10 text-center text-sm text-muted-foreground">
-              Nenhuma reserva futura.
+              Nenhuma reserva neste dia.
             </p>
           ) : (
-            proximas.map((r) => <ReservaCard key={r.id} r={r} podeAgir />)
+            doDiaSelecionado.map((r) => (
+              <ReservaCard key={r.id} r={r} podeAgir={r.dia >= hojeISO && r.status !== "cancelada"} />
+            ))
           )}
-        </TabsContent>
+        </div>
+      )}
 
-        <TabsContent value="historico" className="mt-4 space-y-3">
-          {historico.length === 0 ? (
-            <p className="py-10 text-center text-sm text-muted-foreground">
-              Nenhuma reserva no histórico ainda.
-            </p>
-          ) : (
-            historico.map((r) => <ReservaCard key={r.id} r={r} podeAgir={false} />)
-          )}
-        </TabsContent>
-      </Tabs>
+      {visao === "semana" && (
+        <div className="mt-4">
+          <WeekView
+            date={diaSelecionado}
+            onDateChange={setDiaSelecionado}
+            eventos={eventos}
+            onSelect={selecionarEvento}
+          />
+        </div>
+      )}
+
+      {visao === "mes" && (
+        <div className="mt-4">
+          <MonthView
+            date={diaSelecionado}
+            onDateChange={setDiaSelecionado}
+            eventos={eventos}
+            onSelect={selecionarEvento}
+            onAbrirDia={(d) => {
+              setDiaSelecionado(d);
+              setVisao("dia");
+            }}
+          />
+        </div>
+      )}
 
       <Dialog
         open={!!reagendando}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { List, CalendarDays, Upload, FileText } from "lucide-react";
+import { List, Upload, FileText } from "lucide-react";
 import {
   Tabs,
   TabsContent,
@@ -9,6 +9,10 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { AgendaCalendar } from "@/components/agenda-calendar";
+import { WeekView } from "@/components/agenda/week-view";
+import { MonthView } from "@/components/agenda/month-view";
+import { ViewSwitcher } from "@/components/agenda/view-switcher";
+import type { EventoAgenda, ModoVisaoAgenda } from "@/lib/agenda-types";
 import { StockManager } from "@/components/stock-manager";
 import { ClientesTab } from "@/components/clinica/clientes-tab";
 import { SalasTab } from "@/components/clinica/salas-tab";
@@ -51,6 +55,18 @@ type ReservaView = ReservaDb & {
   materiais: string[];
 };
 
+function reservasParaEventos(reservas: ReservaView[]): EventoAgenda[] {
+  return reservas.map((r) => ({
+    id: r.id,
+    dia: r.dia,
+    horaInicio: r.hora_inicio.slice(0, 5),
+    horaFim: r.hora_fim.slice(0, 5),
+    titulo: r.dr,
+    subtitulo: r.sala,
+    status: r.status,
+  }));
+}
+
 function StatusBadge({ status }: { status: ReservaDb["status"] }) {
   const map = {
     confirmada: { label: "Confirmada", variant: "default" as const },
@@ -68,7 +84,7 @@ export default function ClinicaPage() {
   const [carregandoSalas, setCarregandoSalas] = useState(true);
   const [carregandoReservas, setCarregandoReservas] = useState(true);
   const [selecionada, setSelecionada] = useState<ReservaView | null>(null);
-  const [visao, setVisao] = useState<"lista" | "calendario">("calendario");
+  const [visao, setVisao] = useState<"lista" | ModoVisaoAgenda>("dia");
   const [diaCalendario, setDiaCalendario] = useState(new Date());
   const [termosModeloOpen, setTermosModeloOpen] = useState(false);
   const [arquivoTermos, setArquivoTermos] = useState<string | null>(null);
@@ -174,26 +190,18 @@ export default function ClinicaPage() {
                   Clique em uma reserva para ver materiais solicitados.
                 </CardDescription>
               </div>
-              <div className="flex items-center gap-1 rounded-full border bg-muted/50 p-1">
-                <button
-                  onClick={() => setVisao("calendario")}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
-                    visao === "calendario"
-                      ? "bg-card text-foreground shadow-sm ring-1 ring-foreground/10"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <CalendarDays className="size-3.5" />
-                  Calendário
-                </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <ViewSwitcher
+                  modo={visao === "lista" ? "dia" : visao}
+                  onChange={setVisao}
+                />
                 <button
                   onClick={() => setVisao("lista")}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+                    "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
                     visao === "lista"
                       ? "bg-card text-foreground shadow-sm ring-1 ring-foreground/10"
-                      : "text-muted-foreground hover:text-foreground"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
                   )}
                 >
                   <List className="size-3.5" />
@@ -207,7 +215,7 @@ export default function ClinicaPage() {
                   Carregando...
                 </p>
               )}
-              {!carregandoReservas && visao === "calendario" && (
+              {!carregandoReservas && visao === "dia" && (
                 <AgendaCalendar
                   date={diaCalendario}
                   onDateChange={setDiaCalendario}
@@ -229,6 +237,33 @@ export default function ClinicaPage() {
                     setSelecionada(reservas.find((x) => x.id === r.id) ?? null)
                   }
                 />
+              )}
+              {!carregandoReservas && (visao === "semana" || visao === "mes") && (
+                <>
+                  {visao === "semana" ? (
+                    <WeekView
+                      date={diaCalendario}
+                      onDateChange={setDiaCalendario}
+                      eventos={reservasParaEventos(reservas)}
+                      onSelect={(id) =>
+                        setSelecionada(reservas.find((x) => x.id === id) ?? null)
+                      }
+                    />
+                  ) : (
+                    <MonthView
+                      date={diaCalendario}
+                      onDateChange={setDiaCalendario}
+                      eventos={reservasParaEventos(reservas)}
+                      onSelect={(id) =>
+                        setSelecionada(reservas.find((x) => x.id === id) ?? null)
+                      }
+                      onAbrirDia={(d) => {
+                        setDiaCalendario(d);
+                        setVisao("dia");
+                      }}
+                    />
+                  )}
+                </>
               )}
               {!carregandoReservas && visao === "lista" && (
                 <Table>
