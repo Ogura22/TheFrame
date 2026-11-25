@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { tiposPlanoInfoDb, type ClinicaDb, type TipoPlanoDb } from "@/lib/db-types";
 import { createClient } from "@/lib/supabase/client";
+import { enviarRedefinicaoSenha } from "@/lib/reset-password";
 
 const TODOS_TIPOS: TipoPlanoDb[] = ["avulso", "flex", "fixo"];
 
@@ -42,6 +43,9 @@ export default function EditarClinicaPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [excluirOpen, setExcluirOpen] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
+  const [emailAdmin, setEmailAdmin] = useState<string | null>(null);
+  const [enviandoReset, setEnviandoReset] = useState(false);
+  const [resetEnviado, setResetEnviado] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -54,7 +58,24 @@ export default function EditarClinicaPage() {
         setClinica(data);
         setCarregando(false);
       });
+
+    supabase
+      .from("perfis")
+      .select("email")
+      .eq("clinica_id", params.id)
+      .eq("tipo", "clinica_admin")
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => setEmailAdmin(data?.email ?? null));
   }, [params.id]);
+
+  async function resetarSenhaAdmin() {
+    if (!emailAdmin) return;
+    setEnviandoReset(true);
+    await enviarRedefinicaoSenha(emailAdmin);
+    setEnviandoReset(false);
+    setResetEnviado(true);
+  }
 
   function toggleTipo(tipo: TipoPlanoDb) {
     if (!clinica) return;
@@ -263,6 +284,35 @@ export default function EditarClinicaPage() {
             )}
           </div>
         </CardContent>
+      </Card>
+
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="text-base">Acesso da clínica</CardTitle>
+          <CardDescription>
+            {emailAdmin
+              ? `Login de administração: ${emailAdmin}`
+              : "Nenhum login de administração vinculado a esta clínica."}
+          </CardDescription>
+        </CardHeader>
+        {emailAdmin && (
+          <CardContent>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                onClick={resetarSenhaAdmin}
+                disabled={enviandoReset}
+              >
+                {enviandoReset ? "Enviando..." : "Redefinir senha do admin da clínica"}
+              </Button>
+              {resetEnviado && (
+                <span className="text-sm text-muted-foreground">
+                  Link de redefinição enviado.
+                </span>
+              )}
+            </div>
+          </CardContent>
+        )}
       </Card>
 
       <Card className="mt-6 border-destructive/30">

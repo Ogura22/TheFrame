@@ -35,12 +35,18 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
+  const { pathname } = request.nextUrl;
+
+  // Rota de redefinição de senha precisa ficar acessível mesmo sem sessão
+  // "normal" — o link do e-mail de recuperação só estabelece a sessão no
+  // navegador (client-side), depois que esta resposta já foi enviada.
+  if (pathname === "/redefinir-senha") return supabaseResponse;
+
   // Importante: não rodar lógica entre createServerClient e getUser().
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
   const ehRotaPublica = PUBLICAS.includes(pathname);
 
   if (!user) {

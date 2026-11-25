@@ -22,6 +22,7 @@ import { formatCurrency } from "@/lib/mock-data";
 import type { PerfilDb, ReservaDb } from "@/lib/db-types";
 import { useClinica } from "@/lib/clinica-context";
 import { createClient } from "@/lib/supabase/client";
+import { enviarRedefinicaoSenha } from "@/lib/reset-password";
 
 type ReservaComSala = ReservaDb & { salas: { nome: string } | null };
 
@@ -33,6 +34,16 @@ export function ClientesTab() {
   >({});
   const [carregando, setCarregando] = useState(true);
   const [selecionado, setSelecionado] = useState<PerfilDb | null>(null);
+  const [enviandoReset, setEnviandoReset] = useState(false);
+  const [resetEnviado, setResetEnviado] = useState(false);
+
+  async function resetarSenhaCliente() {
+    if (!selecionado?.email) return;
+    setEnviandoReset(true);
+    await enviarRedefinicaoSenha(selecionado.email);
+    setEnviandoReset(false);
+    setResetEnviado(true);
+  }
 
   useEffect(() => {
     const supabase = createClient();
@@ -85,7 +96,10 @@ export function ClientesTab() {
         {clientes.map((c) => (
           <button
             key={c.id}
-            onClick={() => setSelecionado(c)}
+            onClick={() => {
+              setSelecionado(c);
+              setResetEnviado(false);
+            }}
             className="flex w-full items-center gap-3 py-3 text-left first:pt-0 last:pb-0"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -142,6 +156,22 @@ export function ClientesTab() {
                   <p className="text-xs text-muted-foreground">E-mail</p>
                   <p>{selecionado.email ?? "—"}</p>
                 </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={resetarSenhaCliente}
+                  disabled={enviandoReset}
+                >
+                  {enviandoReset ? "Enviando..." : "Redefinir senha do cliente"}
+                </Button>
+                {resetEnviado && (
+                  <span className="text-xs text-muted-foreground">
+                    Link de redefinição enviado.
+                  </span>
+                )}
               </div>
 
               <Separator />

@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { createClient } from "@/lib/supabase/client";
+import { enviarRedefinicaoSenha } from "@/lib/reset-password";
 import type { PerfilDb } from "@/lib/db-types";
 
 const PLACEHOLDER_FOTO = "https://picsum.photos/seed/sem-foto/200/200";
@@ -78,8 +79,7 @@ export default function PerfilPage() {
 
   async function enviarResetSenha() {
     if (!perfil?.email) return;
-    const supabase = createClient();
-    await supabase.auth.resetPasswordForEmail(perfil.email);
+    await enviarRedefinicaoSenha(perfil.email);
     setResetEnviado(true);
   }
 
