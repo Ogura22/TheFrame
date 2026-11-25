@@ -40,8 +40,9 @@ import { useCart } from "@/lib/cart-context";
 import { useReservation } from "@/lib/reservation-context";
 import { useClinica } from "@/lib/clinica-context";
 import { createClient } from "@/lib/supabase/client";
+import { getPlanoAtivo } from "@/lib/plano-ativo";
 import { formatCurrency, formatDuracao, gerarSlots } from "@/lib/mock-data";
-import type { ItemDb, SalaDb } from "@/lib/db-types";
+import type { ItemDb, PlanoDb, SalaDb } from "@/lib/db-types";
 
 const COMISSAO_PCT = 0.08;
 const TAXA_GATEWAY_PCT = 0.0299;
@@ -92,6 +93,7 @@ export default function ClientePage() {
   const [salas, setSalasState] = useState<SalaDb[]>([]);
   const [itens, setItens] = useState<ItemDb[]>([]);
   const [bloqueados, setBloqueados] = useState<string[]>([]);
+  const [planoAtivo, setPlanoAtivo] = useState<PlanoDb | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -103,6 +105,11 @@ export default function ClientePage() {
       setSalasState(listaSalas);
       setItens(itensRes.data ?? []);
       if (!salaId && listaSalas[0]) setSalaId(listaSalas[0].id);
+    });
+
+    supabase.auth.getUser().then(({ data }) => {
+      if (!data.user) return;
+      getPlanoAtivo(clinicaId, data.user.id).then(setPlanoAtivo);
     });
   }, [clinicaId, salaId, setSalaId]);
 
@@ -319,10 +326,18 @@ export default function ClientePage() {
           blocked={bloqueados}
           value={range}
           onChange={setRange}
+          minimoHoras={planoAtivo?.horas_minimas ?? 1}
         />
         <p className="mt-2 text-xs text-muted-foreground">
           Toque em um horário para iniciar e em outro para concluir a seleção.
           Os valores são somados automaticamente.
+          {planoAtivo && planoAtivo.horas_minimas > 1 && (
+            <>
+              {" "}
+              Seu plano ({planoAtivo.nome}) exige no mínimo{" "}
+              {planoAtivo.horas_minimas}h por reserva.
+            </>
+          )}
         </p>
       </div>
 

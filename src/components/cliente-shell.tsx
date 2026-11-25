@@ -2,17 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { CalendarCheck, CalendarPlus, ShoppingBag, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CartProvider } from "@/lib/cart-context";
 import { ReservationProvider } from "@/lib/reservation-context";
 import { ClinicaProvider } from "@/lib/clinica-context";
 
 const links = [
-  { href: "/cliente", label: "Reservar" },
-  { href: "/cliente/reservas", label: "Minhas Reservas" },
-  { href: "/cliente/itens", label: "Adicionar Itens" },
-  { href: "/cliente/planos", label: "Planos" },
-  { href: "/cliente/perfil", label: "Perfil" },
+  { href: "/cliente/perfil", label: "Perfil", icon: User },
+  { href: "/cliente", label: "Reservar", icon: CalendarPlus },
+  { href: "/cliente/reservas", label: "Minhas Reservas", icon: CalendarCheck },
+  { href: "/cliente/itens", label: "Itens", icon: ShoppingBag },
 ];
 
 export function ClienteShell({
@@ -31,25 +31,27 @@ export function ClienteShell({
       <ReservationProvider>
         <CartProvider>
           <div>
-            <div className="border-b bg-background">
-              <div className="mx-auto flex max-w-xl gap-6 overflow-x-auto px-4">
+            <div className="border-b bg-background/95 backdrop-blur">
+              <div className="mx-auto flex max-w-xl gap-1 overflow-x-auto px-3 py-2">
                 {links.map((l) => {
-                  const active = pathname === l.href;
+                  const active =
+                    l.href === "/cliente"
+                      ? pathname === "/cliente"
+                      : pathname?.startsWith(l.href);
+                  const Icon = l.icon;
                   return (
                     <Link
                       key={l.href}
                       href={l.href}
                       className={cn(
-                        "relative shrink-0 whitespace-nowrap py-3 text-sm font-medium transition-colors",
+                        "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
                         active
-                          ? "text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
+                          ? "bg-secondary text-secondary-foreground"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
                       )}
                     >
+                      <Icon className="size-4" />
                       {l.label}
-                      {active && (
-                        <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-primary" />
-                      )}
                     </Link>
                   );
                 })}

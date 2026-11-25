@@ -30,8 +30,10 @@ import { FieldBox } from "@/components/field-box";
 import { TimeRangeSelect } from "@/components/time-range-select";
 import { TermsGateDialog } from "@/components/terms-acceptance";
 import { formatCurrency, formatDuracao, gerarSlots } from "@/lib/mock-data";
-import type { ReservaDb, StatusReservaDb } from "@/lib/db-types";
+import type { PlanoDb, ReservaDb, StatusReservaDb } from "@/lib/db-types";
 import { createClient } from "@/lib/supabase/client";
+import { useClinica } from "@/lib/clinica-context";
+import { getPlanoAtivo } from "@/lib/plano-ativo";
 
 const COMISSAO_PCT = 0.08;
 const TAXA_GATEWAY_PCT = 0.0299;
@@ -60,6 +62,7 @@ function StatusBadge({ status }: { status: StatusReservaDb }) {
 }
 
 export default function MinhasReservasPage() {
+  const { clinicaId } = useClinica();
   const [lista, setLista] = useState<ReservaView[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [reagendando, setReagendando] = useState<ReservaView | null>(null);
@@ -67,10 +70,24 @@ export default function MinhasReservasPage() {
   const [novoRange, setNovoRange] = useState<[string, string] | null>(null);
   const [bloqueados, setBloqueados] = useState<string[]>([]);
   const [termosReagendamentoOpen, setTermosReagendamentoOpen] = useState(false);
+  const [planoAtivo, setPlanoAtivo] = useState<PlanoDb | null>(null);
+  const [politicaGeral, setPoliticaGeral] = useState<number | null>(null);
 
   useEffect(() => {
     carregarReservas();
-  }, []);
+
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      if (!data.user) return;
+      getPlanoAtivo(clinicaId, data.user.id).then(setPlanoAtivo);
+    });
+    supabase
+      .from("politicas_cancelamento")
+      .select("horas_antecedencia_gratuita")
+      .eq("clinica_id", clinicaId)
+      .maybeSingle()
+      .then(({ data }) => setPoliticaGeral(data?.horas_antecedencia_gratuita ?? null));
+  }, [clinicaId]);
 
   async function carregarReservas() {
     setCarregando(true);
@@ -127,6 +144,19 @@ export default function MinhasReservasPage() {
   const historico = lista
     .filter((r) => r.dia < hojeISO || r.status === "cancelada")
     .sort((a, b) => b.dia.localeCompare(a.dia));
+
+  const limiteHoras = planoAtivo?.horas_antecedencia_remarcacao ?? politicaGeral ?? null;
+  const horasAteReservaOriginal = reagendando
+    ? (new Date(
+        `${reagendando.dia}T${reagendando.hora_inicio.slice(0, 5)}:00`
+      ).getTime() -
+        Date.now()) /
+      3600000
+    : null;
+  const foraDoPrazo =
+    limiteHoras !== null &&
+    horasAteReservaOriginal !== null &&
+    horasAteReservaOriginal < limiteHoras;
 
   const horasNovoRange = novoRange ? horasEntre(novoRange[0], novoRange[1]) : 0;
   const valorHoraReagendando = reagendando
@@ -266,6 +296,14 @@ export default function MinhasReservasPage() {
           </DialogHeader>
 
           <div className="space-y-3">
+            {foraDoPrazo && (
+              <div className="rounded-md border border-amber-400/50 bg-amber-400/10 px-3 py-2 text-xs text-amber-800">
+                Fora do prazo de remarcação sem custo do seu plano
+                {limiteHoras !== null && ` (${limiteHoras}h de antecedência)`} —
+                a clínica pode cobrar uma taxa ao aprovar este reagendamento.
+              </div>
+            )}
+
             <Popover>
               <PopoverTrigger
                 render={
@@ -304,6 +342,7 @@ export default function MinhasReservasPage() {
                 blocked={bloqueados}
                 value={novoRange}
                 onChange={setNovoRange}
+                minimoHoras={planoAtivo?.horas_minimas ?? 1}
               />
             </div>
 

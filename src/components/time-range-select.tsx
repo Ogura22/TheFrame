@@ -14,6 +14,7 @@ interface TimeRangeSelectProps {
   blocked: string[];
   value: [string, string] | null;
   onChange: (value: [string, string] | null) => void;
+  minimoHoras?: number;
 }
 
 function addMinutes(time: string, min: number) {
@@ -31,6 +32,7 @@ export function TimeRangeSelect({
   blocked,
   value,
   onChange,
+  minimoHoras = 1,
 }: TimeRangeSelectProps) {
   const blockedSet = new Set(blocked);
   const inicio = value?.[0] ?? null;
@@ -57,7 +59,7 @@ export function TimeRangeSelect({
           value={inicio ?? undefined}
           onValueChange={(v) => {
             if (!v) return;
-            onChange([v, addMinutes(v, 60)]);
+            onChange([v, addMinutes(v, minimoHoras * 60)]);
           }}
         >
           <SelectTrigger className="h-auto w-full border-none p-0 shadow-none focus-visible:ring-0 [&>svg]:hidden">

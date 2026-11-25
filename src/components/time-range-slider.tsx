@@ -9,6 +9,8 @@ interface TimeRangeSliderProps {
   value: [string, string] | null;
   onChange: (value: [string, string] | null) => void;
   stepMin?: number;
+  /** Duração mínima que o plano ativo do cliente exige para uma reserva. */
+  minimoHoras?: number;
 }
 
 export function TimeRangeSlider({
@@ -17,6 +19,7 @@ export function TimeRangeSlider({
   value,
   onChange,
   stepMin = 30,
+  minimoHoras = 1,
 }: TimeRangeSliderProps) {
   const [anchor, setAnchor] = useState<string | null>(null);
 
@@ -32,14 +35,20 @@ export function TimeRangeSlider({
     return false;
   }
 
-  // Seleção inicial padrão: 1h (dois blocos de 30min), reduzindo para 1
-  // bloco só se o seguinte já estiver bloqueado ou não existir.
+  const slotsMinimos = Math.max(1, Math.round((minimoHoras * 60) / stepMin));
+
+  // Seleção inicial padrão: a duração mínima exigida pelo plano do cliente,
+  // reduzindo bloco a bloco se algum horário no meio já estiver ocupado.
   function rangeMinima(slot: string): [string, string] {
     const i = indexOf(slot);
-    const proximo = slots[i + 1];
-    const podeUmaHora = proximo && !blockedSet.has(proximo);
-    const fimIndex = podeUmaHora ? i + 2 : i + 1;
-    const fim = slots[fimIndex] ?? addMinutes(slot, podeUmaHora ? 60 : stepMin);
+    let alcance = slotsMinimos;
+    while (alcance > 1) {
+      const proximo = slots[i + alcance - 1];
+      if (proximo && !blockedSet.has(proximo)) break;
+      alcance -= 1;
+    }
+    const fimIndex = i + alcance;
+    const fim = slots[fimIndex] ?? addMinutes(slot, alcance * stepMin);
     return [slot, fim];
   }
 
@@ -68,11 +77,14 @@ export function TimeRangeSlider({
     }
 
     // Qualquer outro clique estica (ou encolhe) o intervalo a partir da âncora fixa,
-    // permitindo quantas horas o cliente quiser enquanto houver disponibilidade.
+    // permitindo quantas horas o cliente quiser enquanto houver disponibilidade —
+    // nunca abaixo do mínimo exigido pelo plano.
     const [start, end] = [indexOf(anchor), indexOf(slot)].sort(
       (a, b) => a - b
     );
-    const endExclusive = slots[end + 1] ?? addMinutes(slots[end], stepMin);
+    const endAjustado = Math.max(end, start + slotsMinimos - 1);
+    const endExclusive =
+      slots[endAjustado + 1] ?? addMinutes(slots[endAjustado], stepMin);
     onChange([slots[start], endExclusive]);
   }
 

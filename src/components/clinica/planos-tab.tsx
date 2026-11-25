@@ -74,12 +74,16 @@ function NovoPlanoDialog({
   const [horaFim, setHoraFim] = useState("12:00");
   const [sala, setSala] = useState(salas[0]?.nome ?? "");
   const [itensInclusosIds, setItensInclusosIds] = useState<string[]>([]);
+  const [horasMinimas, setHorasMinimas] = useState("1");
+  const [horasRemarcacao, setHorasRemarcacao] = useState("");
 
   function limpar() {
     setNome("");
     setValor("");
     setHorasIncluidas("");
     setItensInclusosIds([]);
+    setHorasMinimas("1");
+    setHorasRemarcacao("");
   }
 
   function toggleItem(id: string) {
@@ -97,6 +101,8 @@ function NovoPlanoDialog({
       horas_incluidas: tipo === "flex" ? Number(horasIncluidas) || 0 : null,
       recorrencia: tipo === "fixo" ? { diaSemana, horaInicio, horaFim, sala } : null,
       itens_inclusos_ids: itensInclusosIds.length ? itensInclusosIds : null,
+      horas_minimas: Number(horasMinimas) || 1,
+      horas_antecedencia_remarcacao: horasRemarcacao ? Number(horasRemarcacao) : null,
       ativo: true,
     });
     limpar();
@@ -228,6 +234,30 @@ function NovoPlanoDialog({
             </>
           )}
 
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="plano-horas-minimas">Horas mínimas por reserva</Label>
+              <Input
+                id="plano-horas-minimas"
+                type="number"
+                min={1}
+                value={horasMinimas}
+                onChange={(e) => setHorasMinimas(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="plano-remarcacao">Antecedência p/ remarcar (h)</Label>
+              <Input
+                id="plano-remarcacao"
+                type="number"
+                min={0}
+                value={horasRemarcacao}
+                onChange={(e) => setHorasRemarcacao(e.target.value)}
+                placeholder="Usar política da clínica"
+              />
+            </div>
+          </div>
+
           <div className="space-y-1.5">
             <Label>Itens inclusos neste plano (opcional)</Label>
             <div className="max-h-40 space-y-1.5 overflow-y-auto rounded-md border p-2">
@@ -305,6 +335,16 @@ export function PlanosTab() {
     if (!error) setLista((l) => l.filter((p) => p.id !== id));
   }
 
+  async function atualizarRegra(
+    id: string,
+    campo: "horas_minimas" | "horas_antecedencia_remarcacao",
+    valor: number | null
+  ) {
+    setLista((l) => l.map((p) => (p.id === id ? { ...p, [campo]: valor } : p)));
+    const supabase = createClient();
+    await supabase.from("planos").update({ [campo]: valor }).eq("id", id);
+  }
+
   const podeCriar = tiposHabilitados.some((t) => t !== "avulso");
 
   return (
@@ -332,46 +372,81 @@ export function PlanosTab() {
         )}
         {!carregando &&
           lista.map((p) => (
-            <div
-              key={p.id}
-              className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
-            >
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium">{p.nome}</p>
-                  <Badge variant="secondary" className="text-[10px]">
-                    {tiposPlanoInfoDb[p.tipo].label}
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {p.valor === 0 ? "Sem mensalidade" : `${formatCurrency(p.valor)}/mês`}
-                  {p.horas_incluidas && ` · ${p.horas_incluidas}h incluídas`}
-                  {p.recorrencia &&
-                    ` · ${p.recorrencia.diaSemana} ${p.recorrencia.horaInicio}–${p.recorrencia.horaFim}`}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Comissão: {comissaoLabelPorTipoDb(p.tipo)}
-                </p>
-                {p.itens_inclusos_ids && p.itens_inclusos_ids.length > 0 && (
+            <div key={p.id} className="space-y-2.5 py-3 first:pt-0 last:pb-0">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium">{p.nome}</p>
+                    <Badge variant="secondary" className="text-[10px]">
+                      {tiposPlanoInfoDb[p.tipo].label}
+                    </Badge>
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    Itens inclusos:{" "}
-                    {p.itens_inclusos_ids
-                      .map((id) => itens.find((i) => i.id === id)?.nome)
-                      .filter(Boolean)
-                      .join(", ")}
+                    {p.valor === 0 ? "Sem mensalidade" : `${formatCurrency(p.valor)}/mês`}
+                    {p.horas_incluidas && ` · ${p.horas_incluidas}h incluídas`}
+                    {p.recorrencia &&
+                      ` · ${p.recorrencia.diaSemana} ${p.recorrencia.horaInicio}–${p.recorrencia.horaFim}`}
                   </p>
+                  <p className="text-xs text-muted-foreground">
+                    Comissão: {comissaoLabelPorTipoDb(p.tipo)}
+                  </p>
+                  {p.itens_inclusos_ids && p.itens_inclusos_ids.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Itens inclusos:{" "}
+                      {p.itens_inclusos_ids
+                        .map((id) => itens.find((i) => i.id === id)?.nome)
+                        .filter(Boolean)
+                        .join(", ")}
+                    </p>
+                  )}
+                </div>
+                {p.tipo !== "avulso" && (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-muted-foreground hover:text-destructive"
+                    onClick={() => remover(p.id)}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
                 )}
               </div>
-              {p.tipo !== "avulso" && (
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="text-muted-foreground hover:text-destructive"
-                  onClick={() => remover(p.id)}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              )}
+
+              <div className="flex flex-wrap items-end gap-3 rounded-md border bg-muted/30 p-2.5">
+                <div className="space-y-1">
+                  <span className="text-[10px] text-muted-foreground">
+                    Horas mínimas por reserva
+                  </span>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={p.horas_minimas}
+                    onChange={(e) =>
+                      atualizarRegra(p.id, "horas_minimas", Number(e.target.value) || 1)
+                    }
+                    className="h-8 w-24"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[10px] text-muted-foreground">
+                    Antecedência p/ remarcar (h)
+                  </span>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={p.horas_antecedencia_remarcacao ?? ""}
+                    placeholder="política geral"
+                    onChange={(e) =>
+                      atualizarRegra(
+                        p.id,
+                        "horas_antecedencia_remarcacao",
+                        e.target.value ? Number(e.target.value) : null
+                      )
+                    }
+                    className="h-8 w-32"
+                  />
+                </div>
+              </div>
             </div>
           ))}
         {!carregando && lista.length === 0 && (

@@ -14,6 +14,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import { PlanosConteudo } from "@/components/planos-conteudo";
 import { createClient } from "@/lib/supabase/client";
 import { enviarRedefinicaoSenha } from "@/lib/reset-password";
 import type { PerfilDb } from "@/lib/db-types";
@@ -93,12 +100,19 @@ export default function PerfilPage() {
 
   return (
     <div className="mx-auto max-w-xl px-4 py-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Meu perfil</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Perfil</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Dados usados no contrato, na cobrança e no contato com a clínica.
+        Seus dados e o plano que rege suas reservas nesta clínica.
       </p>
 
-      <div className="mt-6 flex items-center gap-4">
+      <Tabs defaultValue="conta" className="mt-6">
+        <TabsList>
+          <TabsTrigger value="conta">Conta</TabsTrigger>
+          <TabsTrigger value="planos">Planos</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="conta" className="mt-5">
+      <div className="flex items-center gap-4">
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
@@ -235,6 +249,12 @@ export default function PerfilPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        </TabsContent>
+
+        <TabsContent value="planos" className="mt-5">
+          <PlanosConteudo />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

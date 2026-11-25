@@ -12,12 +12,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { comissaoLabelPorTipoDb, tiposPlanoInfoDb, type AssinaturaDb, type ItemDb, type PlanoDb } from "@/lib/db-types";
+import {
+  comissaoLabelPorTipoDb,
+  tiposPlanoInfoDb,
+  type AssinaturaDb,
+  type ItemDb,
+  type PlanoDb,
+} from "@/lib/db-types";
 import { useClinica } from "@/lib/clinica-context";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/mock-data";
-
-const AVULSO_ID = "avulso";
 
 function proximoMes() {
   const d = new Date();
@@ -25,12 +29,12 @@ function proximoMes() {
   return d.toISOString().slice(0, 10);
 }
 
-export default function PlanosPage() {
+export function PlanosConteudo() {
   const { clinicaId } = useClinica();
   const [planos, setPlanos] = useState<PlanoDb[]>([]);
   const [itens, setItens] = useState<ItemDb[]>([]);
   const [assinaturaAtual, setAssinaturaAtual] = useState<AssinaturaDb | null>(null);
-  const [planoAtivoId, setPlanoAtivoId] = useState<string>(AVULSO_ID);
+  const [planoAtivoId, setPlanoAtivoId] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [processando, setProcessando] = useState(false);
 
@@ -43,7 +47,12 @@ export default function PlanosPage() {
       } = await supabase.auth.getUser();
 
       const [planosRes, itensRes, assinaturaRes] = await Promise.all([
-        supabase.from("planos").select("*").eq("clinica_id", clinicaId).eq("ativo", true),
+        supabase
+          .from("planos")
+          .select("*")
+          .eq("clinica_id", clinicaId)
+          .eq("ativo", true)
+          .order("tipo"),
         supabase.from("itens").select("*").eq("clinica_id", clinicaId),
         user
           ? supabase
@@ -55,10 +64,13 @@ export default function PlanosPage() {
           : Promise.resolve({ data: null }),
       ]);
 
-      setPlanos(planosRes.data ?? []);
+      const listaPlanos = planosRes.data ?? [];
+      const avulso = listaPlanos.find((p) => p.tipo === "avulso");
+
+      setPlanos(listaPlanos);
       setItens(itensRes.data ?? []);
       setAssinaturaAtual(assinaturaRes.data ?? null);
-      setPlanoAtivoId(assinaturaRes.data?.plano_id ?? AVULSO_ID);
+      setPlanoAtivoId(assinaturaRes.data?.plano_id ?? avulso?.id ?? null);
       setCarregando(false);
     }
 
@@ -83,6 +95,13 @@ export default function PlanosPage() {
         .eq("id", assinaturaAtual.id);
     }
 
+    if (plano.tipo === "avulso") {
+      setAssinaturaAtual(null);
+      setPlanoAtivoId(plano.id);
+      setProcessando(false);
+      return;
+    }
+
     const { data: nova } = await supabase
       .from("assinaturas")
       .insert({
@@ -100,77 +119,17 @@ export default function PlanosPage() {
     setProcessando(false);
   }
 
-  async function usarAvulso() {
-    if (!assinaturaAtual) {
-      setPlanoAtivoId(AVULSO_ID);
-      return;
-    }
-    setProcessando(true);
-    const supabase = createClient();
-    await supabase
-      .from("assinaturas")
-      .update({ status: "cancelada" })
-      .eq("id", assinaturaAtual.id);
-    setAssinaturaAtual(null);
-    setPlanoAtivoId(AVULSO_ID);
-    setProcessando(false);
-  }
-
   if (carregando) {
     return (
-      <div className="mx-auto max-w-xl px-4 py-16 text-center text-sm text-muted-foreground">
+      <p className="py-16 text-center text-sm text-muted-foreground">
         Carregando...
-      </div>
+      </p>
     );
   }
 
   return (
-    <div className="mx-auto max-w-xl px-4 py-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Planos</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Escolha como prefere pagar pelas salas.
-      </p>
-
-      <div className="mt-6 space-y-3">
-        <Card className={cn(planoAtivoId === AVULSO_ID && "ring-2 ring-primary ring-offset-0")}>
-          <CardHeader className="flex-row items-start justify-between space-y-0">
-            <div>
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-base">Avulso</CardTitle>
-                <Badge variant="secondary" className="text-[10px]">
-                  {tiposPlanoInfoDb.avulso.label}
-                </Badge>
-              </div>
-              <CardDescription className="mt-1">
-                {tiposPlanoInfoDb.avulso.descricao}
-              </CardDescription>
-            </div>
-            {planoAtivoId === AVULSO_ID && (
-              <Badge className="shrink-0 gap-1">
-                <Check className="size-3" />
-                Ativo
-              </Badge>
-            )}
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <p className="text-lg font-semibold">Sem mensalidade</p>
-            <p className="text-xs text-muted-foreground">
-              Comissão da plataforma: {comissaoLabelPorTipoDb("avulso")}
-            </p>
-            {planoAtivoId !== AVULSO_ID && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="mt-1"
-                disabled={processando}
-                onClick={usarAvulso}
-              >
-                Usar avulso
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-
+    <div>
+      <div className="space-y-3">
         {planos.map((p) => {
           const ativo = p.id === planoAtivoId;
           const info = tiposPlanoInfoDb[p.tipo];
@@ -195,8 +154,10 @@ export default function PlanosPage() {
               </CardHeader>
               <CardContent className="space-y-2">
                 <p className="text-lg font-semibold">
-                  {formatCurrency(p.valor)}
-                  <span className="text-sm font-normal text-muted-foreground">/mês</span>
+                  {p.valor === 0 ? "Sem mensalidade" : formatCurrency(p.valor)}
+                  {p.valor > 0 && (
+                    <span className="text-sm font-normal text-muted-foreground">/mês</span>
+                  )}
                 </p>
                 {p.horas_incluidas && (
                   <p className="text-sm text-muted-foreground">
@@ -219,6 +180,11 @@ export default function PlanosPage() {
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground">
+                  Mínimo de {p.horas_minimas}h por reserva
+                  {p.horas_antecedencia_remarcacao !== null &&
+                    ` · remarcação grátis até ${p.horas_antecedencia_remarcacao}h antes`}
+                </p>
+                <p className="text-xs text-muted-foreground">
                   Comissão da plataforma: {comissaoLabelPorTipoDb(p.tipo)}
                 </p>
                 {!ativo && (
@@ -229,13 +195,18 @@ export default function PlanosPage() {
                     disabled={processando}
                     onClick={() => assinar(p)}
                   >
-                    Assinar este plano
+                    {p.tipo === "avulso" ? "Usar avulso" : "Assinar este plano"}
                   </Button>
                 )}
               </CardContent>
             </Card>
           );
         })}
+        {planos.length === 0 && (
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            Nenhum plano disponível ainda.
+          </p>
+        )}
       </div>
 
       {assinaturaAtual && planoAtivoId === assinaturaAtual.plano_id && (

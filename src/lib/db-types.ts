@@ -112,6 +112,8 @@ export interface PlanoDb {
     sala: string;
   } | null;
   itens_inclusos_ids: string[] | null;
+  horas_minimas: number;
+  horas_antecedencia_remarcacao: number | null;
   ativo: boolean;
   created_at: string;
 }

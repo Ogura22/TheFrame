@@ -73,5 +73,17 @@ export async function criarClinicaComLogin(
     return { ok: false, erro: erroUsuario.message };
   }
 
+  // Toda clínica nasce com o plano "Avulso" — ele também é configurável
+  // (quantidade mínima de horas, antecedência para remarcação), não é mais
+  // só uma constante do front.
+  await supabase.from("planos").insert({
+    clinica_id: clinica.id,
+    tipo: "avulso",
+    nome: "Avulso",
+    valor: 0,
+    horas_minimas: 1,
+    ativo: true,
+  });
+
   return { ok: true };
 }
