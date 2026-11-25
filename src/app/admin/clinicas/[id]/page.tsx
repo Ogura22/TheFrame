@@ -230,7 +230,11 @@ export default function EditarClinicaPage() {
               }}
             >
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue>
+                  {(v: ClinicaDb["checkout"]) =>
+                    v === "automatico" ? "Automático" : "Com confirmação"
+                  }
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="automatico">Automático</SelectItem>

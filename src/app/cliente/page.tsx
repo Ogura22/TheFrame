@@ -259,7 +259,11 @@ export default function ClientePage() {
         <FieldBox label="Sala" icon={<ChevronDown className="size-4 text-muted-foreground" />}>
           <Select value={salaId} onValueChange={(v) => v && setSalaId(v)}>
             <SelectTrigger className="h-auto w-full border-none p-0 shadow-none focus-visible:ring-0 [&>svg]:hidden">
-              <SelectValue />
+              <SelectValue>
+                {(id: string) =>
+                  salas.find((s) => s.id === id)?.nome ?? "Selecionar sala"
+                }
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {salas.map((s) => (

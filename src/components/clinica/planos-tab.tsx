@@ -124,7 +124,9 @@ function NovoPlanoDialog({
             <Label>Tipo de plano</Label>
             <Select value={tipo} onValueChange={(v) => v && setTipo(v as TipoPlanoDb)}>
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue>
+                  {(v: TipoPlanoDb) => tiposPlanoInfoDb[v]?.label}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {tiposCriaveis.map((t) => (

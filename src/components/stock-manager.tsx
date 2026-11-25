@@ -241,7 +241,9 @@ function NovoItemDialog({
               onValueChange={(v) => v && setCategoria(v as CategoriaItemDb)}
             >
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue>
+                  {(v: CategoriaItemDb) => categoriasItemDb[v]}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {Object.entries(categoriasItemDb).map(([value, label]) => (

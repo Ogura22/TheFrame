@@ -7,7 +7,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { salas } from "@/lib/mock-data";
 
 interface ReservationContextValue {
   salaId: string;
@@ -28,7 +27,7 @@ const ReservationContext = createContext<ReservationContextValue | null>(
 );
 
 export function ReservationProvider({ children }: { children: ReactNode }) {
-  const [salaId, setSalaId] = useState(salas[0].id);
+  const [salaId, setSalaId] = useState("");
   // Começa vazio: new Date() no estado inicial quebra o prerender (Cache Components)
   const [data, setData] = useState<Date | undefined>(undefined);
   const [range, setRange] = useState<[string, string] | null>(null);
